@@ -6,7 +6,7 @@ set(CMAKE_CXX_STANDARD 17)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 # ------------------------------------------
 
-set(LLVM_DIR "/home/siddhesh/dev/llvm-project/build/lib/cmake/llvm")
+set(LLVM_DIR "/home/siddhesh/dev/llvm-project/build/lib/cmake/llvm/")
 
 find_package(LLVM REQUIRED CONFIG)
 
