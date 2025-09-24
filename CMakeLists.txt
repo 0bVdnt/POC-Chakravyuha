@@ -15,7 +15,7 @@ include_directories(${LLVM_INCLUDE_DIRS})
 add_definitions(${LLVM_DEFINITIONS})
 
 # Our pass is a shared library
-add_library(StringEncryptPass MODULE src/StringEncryptionPass.cpp)
+add_library(StringEncryptPass MODULE src/StringEncryptPass.cpp)
 
 # Link against the necessary LLVM components
 llvm_map_components_to_libnames(llvm_libs support core irreader IR TransformsUtils)
