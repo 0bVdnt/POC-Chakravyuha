@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """
-Simple LLVM-based Code Obfuscator - First Principles Approach
-Minimal working prototype that actually works with LLVM infrastructure
+Simple LLVM-based Code Obfuscator - Working Version
+Fixed path issues and simplified approach
 """
 
 import os
@@ -24,12 +24,9 @@ class SimpleObfuscator:
             'fake_calls': 0,
             'cycles': 0
         }
-        self.temp_dir = tempfile.mkdtemp()
-        print(f"Working directory: {self.temp_dir}")
         
     def find_clang(self):
         """Find clang compiler"""
-        # Try common locations
         possible_paths = [
             'clang',
             '/usr/bin/clang',
@@ -85,9 +82,6 @@ static int {func_name}(int x) {{
     
     def add_fake_calls(self, source):
         """Add calls to bogus functions"""
-        fake_calls = []
-        
-        # Look for bogus function names in the source
         lines = source.split('\n')
         bogus_funcs = []
         
@@ -117,43 +111,6 @@ static int {func_name}(int x) {{
                 source = source[:brace_pos+1] + fake_call_code + source[brace_pos+1:]
         
         return source
-    
-    def obfuscate_strings_simple(self, source):
-        """Simple string obfuscation - just make them harder to read"""
-        import re
-        
-        def obfuscate_string(match):
-            original = match.group(1)
-            if len(original) == 0 or original.startswith('%'):  # Skip format strings
-                return match.group(0)
-            
-            # Simple character shifting
-            obfuscated_chars = []
-            for char in original:
-                shifted = ord(char) + 1
-                if shifted > 126:  # Keep printable
-                    shifted = 33
-                obfuscated_chars.append(shifted)
-            
-            var_name = self.generate_random_name("str")
-            
-            decrypt_code = f'''({{\\
-    char {var_name}[{len(original)+1}]; \\
-    int _obf_chars[] = {{{', '.join(map(str, obfuscated_chars))}}}; \\
-    for(int _i = 0; _i < {len(original)}; _i++) {{ \\
-        {var_name}[_i] = _obf_chars[_i] - 1; \\
-    }} \\
-    {var_name}[{len(original)}] = 0; \\
-    {var_name}; \\
-}})'''
-            
-            self.stats['string_encryptions'] += 1
-            return f'"{decrypt_code}"'
-        
-        # Only obfuscate simple string literals, avoid printf format strings
-        pattern = r'"([^"]*)"'
-        result = re.sub(pattern, obfuscate_string, source)
-        return result
     
     def obfuscate_source(self, input_file, cycles=1):
         """Main obfuscation function"""
@@ -186,9 +143,6 @@ static int {func_name}(int x) {{
             # Add fake calls
             source = self.add_fake_calls(source)
             
-            # Simple string obfuscation (be very careful here)
-            # source = self.obfuscate_strings_simple(source)
-            
             self.stats['cycles'] += 1
         
         self.stats['obfuscated_size'] = len(source)
@@ -198,20 +152,32 @@ static int {func_name}(int x) {{
         """Compile the obfuscated code"""
         clang = self.find_clang()
         
-        cmd = [clang, source_file, '-o', output_binary]
+        # Use absolute paths to avoid path issues
+        abs_source = os.path.abspath(source_file)
+        abs_output = os.path.abspath(output_binary)
+        
+        print(f"Checking source file: {abs_source}")
+        print(f"File exists: {os.path.exists(abs_source)}")
+        
+        if not os.path.exists(abs_source):
+            print(f"ERROR: Source file {abs_source} does not exist!")
+            return None
+        
+        cmd = [clang, abs_source, '-o', abs_output]
         
         # Add platform-specific flags
         if platform == 'windows':
-            # This requires mingw cross-compiler
-            cmd = [clang, '-target', 'x86_64-w64-mingw32', source_file, '-o', output_binary + '.exe']
+            cmd = [clang, '-target', 'x86_64-w64-mingw32', abs_source, '-o', abs_output + '.exe']
+            abs_output += '.exe'
         
         print(f"Compiling: {' '.join(cmd)}")
         
         try:
-            result = subprocess.run(cmd, capture_output=True, text=True, cwd=self.temp_dir)
+            result = subprocess.run(cmd, capture_output=True, text=True)
             if result.returncode == 0:
                 print("Compilation successful!")
-                return output_binary + ('.exe' if platform == 'windows' else '')
+                print(f"Binary created at: {abs_output}")
+                return abs_output
             else:
                 print(f"Compilation failed:")
                 print(f"STDOUT: {result.stdout}")
@@ -284,11 +250,11 @@ def main():
         print(f"Obfuscated source saved to: {args.output}")
         
         # Step 2: Compile to binary
-        print("\\n=== STEP 2: Compilation ===")
+        print("\n=== STEP 2: Compilation ===")
         binary_path = obfuscator.compile_code(args.output, args.binary, args.platform)
         
         # Step 3: Generate report
-        print("\\n=== STEP 3: Report Generation ===")
+        print("\n=== STEP 3: Report Generation ===")
         report = obfuscator.generate_report(args.input_file, args.output, args)
         
         # Save report
@@ -297,7 +263,7 @@ def main():
             json.dump(report, f, indent=2)
         
         # Print summary
-        print("\\n" + "="*50)
+        print("\n" + "="*50)
         print("OBFUSCATION SUMMARY")
         print("="*50)
         print(f"Input file: {args.input_file}")
@@ -312,7 +278,8 @@ def main():
         print("="*50)
         
         if binary_path and os.path.exists(binary_path):
-            print(f"\\nTest the binary: ./{binary_path}")
+            print(f"\nTest the binary: {binary_path}")
+            print("Run it with: ./" + os.path.basename(binary_path))
         
     except Exception as e:
         print(f"Error: {e}")
