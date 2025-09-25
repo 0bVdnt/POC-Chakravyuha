@@ -112,7 +112,68 @@ static int {func_name}(int x) {{
         
         return source
     
-    def obfuscate_source(self, input_file, cycles=1):
+    def obfuscate_strings(self, source):
+        """Obfuscate string literals to hide them from 'strings' command"""
+        import re
+        
+        def encrypt_string(match):
+            original_string = match.group(1)
+            
+            # Skip empty strings
+            if len(original_string) == 0:
+                return match.group(0)
+            
+            # Skip printf format strings (containing %)
+            if '%' in original_string:
+                return match.group(0)
+            
+            # Skip very short strings that might be important
+            if len(original_string) < 2:
+                return match.group(0)
+            
+            # Generate a random key for XOR encryption
+            key = random.randint(1, 255)
+            
+            # Encrypt each character
+            encrypted_bytes = []
+            for char in original_string:
+                encrypted_bytes.append(ord(char) ^ key)
+            
+            # Generate a unique variable name
+            var_name = self.generate_random_name("str")
+            
+            # Create the decryption code
+            decrypt_code = f'''({{
+    unsigned char {var_name}[] = {{{', '.join(str(b) for b in encrypted_bytes)}, 0}};
+    for(int _i = 0; _i < {len(original_string)}; _i++) {{
+        {var_name}[_i] ^= {key};
+    }}
+    (char*){var_name};
+}})'''
+            
+            self.stats['string_encryptions'] += 1
+            print(f"    Encrypted string: '{original_string}' -> key {key}")
+            
+            return decrypt_code
+        
+        # Simple approach: find all string literals, but skip include statements
+        lines = source.split('\n')
+        result_lines = []
+        
+        for line in lines:
+            # Skip #include lines completely
+            if line.strip().startswith('#include'):
+                result_lines.append(line)
+                continue
+            
+            # Apply string obfuscation to other lines
+            pattern = r'"([^"]*)"'
+            obfuscated_line = re.sub(pattern, encrypt_string, line)
+            result_lines.append(obfuscated_line)
+        
+        return '\n'.join(result_lines)
+
+    def obfuscate_source(self, input_file, cycles=1, enable_string_obfuscation=True):
         """Main obfuscation function"""
         print(f"Reading: {input_file}")
         
@@ -133,6 +194,11 @@ static int {func_name}(int x) {{
             source = headers + source
         
         print(f"Starting obfuscation with {cycles} cycles...")
+        
+        # Apply string obfuscation first (before adding bogus functions)
+        if enable_string_obfuscation:
+            print("  Applying string obfuscation...")
+            source = self.obfuscate_strings(source)
         
         for cycle in range(cycles):
             print(f"  Cycle {cycle + 1}")
@@ -210,9 +276,13 @@ static int {func_name}(int x) {{
             },
             'methods_used': [
                 'Bogus Function Insertion',
-                'Fake Call Injection'
+                'Fake Call Injection',
+                'String Encryption' if self.stats['string_encryptions'] > 0 else None
             ]
         }
+        
+        # Remove None values from methods used
+        report['methods_used'] = [m for m in report['methods_used'] if m is not None]
         
         return report
 
@@ -223,6 +293,7 @@ def main():
     parser.add_argument('-b', '--binary', help='Output binary file')
     parser.add_argument('-c', '--cycles', type=int, default=1, help='Obfuscation cycles')
     parser.add_argument('-p', '--platform', choices=['linux', 'windows'], default='linux')
+    parser.add_argument('--no-strings', action='store_true', help='Disable string obfuscation')
     
     args = parser.parse_args()
     
@@ -242,7 +313,8 @@ def main():
         
         # Step 1: Obfuscate source
         print("=== STEP 1: Source Code Obfuscation ===")
-        obfuscated_source = obfuscator.obfuscate_source(args.input_file, args.cycles)
+        enable_strings = not args.no_strings
+        obfuscated_source = obfuscator.obfuscate_source(args.input_file, args.cycles, enable_strings)
         
         # Write obfuscated source
         with open(args.output, 'w') as f:
@@ -274,12 +346,20 @@ def main():
         print(f"Obfuscated size: {obfuscator.stats['obfuscated_size']} bytes")
         print(f"Bogus functions: {obfuscator.stats['bogus_functions']}")
         print(f"Fake calls: {obfuscator.stats['fake_calls']}")
+        print(f"String encryptions: {obfuscator.stats['string_encryptions']}")
         print(f"Cycles completed: {obfuscator.stats['cycles']}")
         print("="*50)
         
         if binary_path and os.path.exists(binary_path):
             print(f"\nTest the binary: {binary_path}")
             print("Run it with: ./" + os.path.basename(binary_path))
+            
+            # Test string obfuscation effectiveness
+            if obfuscator.stats['string_encryptions'] > 0:
+                print(f"\nTo test string obfuscation:")
+                print(f"  Original: strings {args.input_file}")
+                print(f"  Obfuscated: strings {binary_path}")
+                print(f"  Compare the outputs - strings should be hidden!")
         
     except Exception as e:
         print(f"Error: {e}")
