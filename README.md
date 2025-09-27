@@ -146,5 +146,5 @@ This Proof-of-Concept serves as the foundation for a more comprehensive obfuscat
 
 This project is distributed under a dual-license model.
 
-- **Community Edition**: Licensed under the GNU Affero General Public License v3.0 (AGPL-3.0). This is a strong copyleft license intended to foster community collaboration and ensure that derivative works remain open source. Please see the [LICENSE](LICENSE) file for the full terms.
+- **Community Edition**: Licensed under the GNU Affero General Public License v3.0 (AGPL-3.0). This is a strong copyleft license intended to foster community collaboration and ensure that derivative works remain open source. Please see the [LICENSE](LICENSE.md) file for the full terms.
 - **Commercial License**: A separate commercial license is available for organizations that intend to integrate Chakravyuha into proprietary software products without being subject to the obligations of the AGPL-3.0. Please direct all commercial licensing inquiries to the project maintainers.
