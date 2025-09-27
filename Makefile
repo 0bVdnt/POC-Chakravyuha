@@ -10,7 +10,7 @@ STRINGS  ?= strings
 SRC      := test_program.c
 LL       := $(SRC:.c=.ll)
 OBF_LL   := obfuscated.ll
-NO_OBF	 := no_obsfuscation
+NO_OBF	 := no_obfuscation
 BIN      := obfuscated_program
 
 # Flags
