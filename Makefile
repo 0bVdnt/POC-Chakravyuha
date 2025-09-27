@@ -60,5 +60,5 @@ strings: $(BIN)
 
 clean:
 	@echo "cleaning generated files..."
-	-rm -f $(LL) $(OBF_LL) $(BIN)
+	-rm -f $(LL) $(OBF_LL) $(BIN) $(NO_OBF) report.json
 
