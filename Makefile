@@ -1,8 +1,8 @@
 # Makefile for: compile -> LLVM IR -> obfuscate with pass -> link -> run -> strings
 
 # Tools (override on command line, e.g. "make CLANG=clang")
-CLANG    ?= clang-20
-OPT      ?= opt-20
+CLANG    ?= clang
+OPT      ?= opt
 PASS_SO  ?= ./build/lib/libChakravyuhaStringEncryptionPass.so
 STRINGS  ?= strings
 
