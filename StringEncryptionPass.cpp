@@ -347,14 +347,25 @@ struct StringEncryptionPass : public PassInfoMixin<StringEncryptionPass> {
     auto now = std::chrono::system_clock::now();
     auto in_time_t = std::chrono::system_clock::to_time_t(now);
     struct tm buf;
+
+// Using #ifdef directive to make the file cross platform for use in windows
+// environments as well
+#ifdef _WIN32
+    gmtime_s(&buf, &in_time_t);
+#else
     gmtime_r(&in_time_t, &buf); // Use thread-safe gmtime_r
+#endif
     char time_str[24];
     strftime(time_str, sizeof(time_str), "%Y-%m-%dT%H:%M:%SZ", &buf);
     S << "  \"timestamp\": \"" << time_str << "\",\n";
 
     S << "  \"inputParameters\": {\n";
     S << "    \"obfuscationLevel\": \"medium\",\n";
+#ifdef _WIN32
+    S << "  \"targetPlatform\": \"Windows\",\n";
+#else
     S << "    \"targetPlatform\": \"linux\",\n";
+#endif // _WIN32
     S << "    \"enableStringEncryption\": true,\n";
     S << "    \"enableControlFlowFlattening\": false,\n";
     S << "    \"enableAntiDebug\": false\n";
