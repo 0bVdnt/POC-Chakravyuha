@@ -1,4 +1,3 @@
-#!/bin/bash
 # Exit immediately if any command fails
 set -e
 
@@ -21,13 +20,16 @@ if [ ! -f "$PASS_LIB" ]; then
     exit 1
 fi
 
+# Use the first command-line argument as the search string, or default to "SUPER_SECRET_STRING"
+SEARCH_STRING="${1:-SUPER_SECRET_STRING}"
+
 echo "--- [1/4] Compiling C to LLVM IR ---"
 clang -O0 -S -emit-llvm "$SRC_FILE" -o "$LLVM_IR"
 
 echo "--- [2/4] Running Obfuscation Pass ---"
 # Note: Stderr (where the report is printed) is redirected to the report file
 opt -load-pass-plugin="$PASS_LIB" -passes=chakravyuha-string-encrypt \
-    "$LLVM_IR" -S -o "$OBFUSCATED_IR" 2>"$REPORT_FILE"
+    "$LLVM_IR" -S -o "$OBFUSCATED_IR" 2> "$REPORT_FILE"
 
 echo "--- [3/4] Compiling Obfuscated IR to Executable ---"
 clang "$OBFUSCATED_IR" -o "$FINAL_BINARY"
@@ -38,8 +40,8 @@ echo "Output:"
 
 echo ""
 echo "--- Verification ---"
-echo "Running 'strings' on the binary. The secret string should NOT be visible:"
-strings "$FINAL_BINARY" | grep "TEAM_CHAKRAVYUHA" || echo "(String not found, success!)"
+echo "Running 'strings' for '$SEARCH_STRING'. It should NOT be visible:"
+strings "$FINAL_BINARY" | grep --color=never "$SEARCH_STRING" || echo "(String not found, success!)"
 echo ""
 echo "Obfuscation complete. Final binary is at $FINAL_BINARY"
 echo "Report generated at $REPORT_FILE"

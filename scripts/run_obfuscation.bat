@@ -18,6 +18,10 @@ if not exist "%PASS_LIB%" (
     exit /b 1
 )
 
+:: Use the first command-line argument as the search string, or default
+set SEARCH_STRING=SUPER_SECRET_STRING
+if not "%~1"=="" set SEARCH_STRING=%1
+
 echo --- [1/4] Compiling C to LLVM IR ---
 clang -O0 -S -emit-llvm "%SRC_FILE%" -o "%LLVM_IR%"
 if %errorlevel% neq 0 exit /b %errorlevel%
@@ -38,8 +42,8 @@ echo Output:
 
 echo.
 echo --- Verification ---
-echo Running 'strings' on the binary. The secret string should NOT be visible:
-strings "%FINAL_BINARY%" | findstr "TEAM_CHAKRAVYUHA" || echo (String not found, success!)
+echo Running 'strings' for "%SEARCH_STRING%". It should NOT be visible:
+strings "%FINAL_BINARY%" | findstr "%SEARCH_STRING%" || echo (String not found, success!)
 echo.
 echo Obfuscation complete. Final binary is at %FINAL_BINARY%
 echo Report generated at %REPORT_FILE%
