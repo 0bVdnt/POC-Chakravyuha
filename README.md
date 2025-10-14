@@ -4,9 +4,9 @@
 [![LLVM Version](https://img.shields.io/badge/LLVM-20.1+-blueviolet?style=for-the-badge&logo=llvm)](https://llvm.org/)
 [![Last Commit](https://img.shields.io/github/last-commit/0bvdnt/poc-chakravyuha?style=for-the-badge&color=brightgreen)](https://github.com/0bvdnt/poc-chakravyuha/commits/main)
 [![Repository Size](https://img.shields.io/github/repo-size/0bvdnt/poc-chakravyuha?style=for-the-badge)](https://github.com/0bvdnt/poc-chakravyuha)
-[![License: AGPL v3](https://img.shields.io/badge/License-AGPL%20v3-blue.svg)](https://www.gnu.org/licenses/agpl-3.0)
-[![Build Status](https://img.shields.io/badge/build-passing-brightgreen.svg)](https://github.com/0bvdnt/poc-chakravyuha)
-[![Platform](https://img.shields.io/badge/platform-Linux%20%7C%20Windows%20%7C%20macOS-orange.svg)](https://github.com/0bVdnt/LLVM-Passes/tree/main/ChakraPasses)
+[![License: AGPL v3](https://img.shields.io/badge/License-AGPL%20v3-blue.svg?style=for-the-badge)](https://www.gnu.org/licenses/agpl-3.0)
+[![Build Status](https://img.shields.io/badge/build-passing-brightgreen.svg?style=for-the-badge)](https://github.com/0bvdnt/poc-chakravyuha)
+[![Platform Support](https://img.shields.io/badge/platform-Linux%20%7C%20Windows%20%7C%20macOS-orange.svg?style=for-the-badge)](https://github.com/0bVdnt/LLVM-Passes/tree/main/ChakraPasses)
 
 ## 1. Introduction
 

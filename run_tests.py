@@ -17,18 +17,18 @@ RESULTS_DIR = SCRIPT_DIR / "test_results"
 # --- Pass Pipelines ---
 PASS_PIPELINES = {
     "full": (
+        "chakravyuha-initial-metrics,"
         "chakravyuha-string-encrypt,"
         "chakravyuha-control-flow-flatten,"
         "chakravyuha-fake-code-insertion"
     ),
-    "cff": "chakravyuha-control-flow-flatten",
-    "string": "chakravyuha-string-encrypt",
-    "fake": "chakravyuha-fake-code-insertion",
+    "cff": "chakravyuha-initial-metrics,chakravyuha-control-flow-flatten",
+    "string": "chakravyuha-initial-metrics,chakravyuha-string-encrypt",
+    "fake": "chakravyuha-initial-metrics,chakravyuha-fake-code-insertion",
 }
 
+
 # --- Terminal Colors ---
-
-
 class Colors:
     GREEN = "\033[0;32m"
     RED = "\033[0;31m"
@@ -38,8 +38,6 @@ class Colors:
 
 
 # --- Helper Functions ---
-
-
 def find_exec(name, msg):
     exec_path = shutil.which(name)
     if not exec_path:
@@ -109,8 +107,6 @@ def run_command(cmd_args, log_file=None, env=None):
 
 
 # --- Main Test Logic ---
-
-
 def run_test(test_c_file, pipeline_name, pass_plugin_path, clang, opt, env):
     test_name = test_c_file.stem
     print(
@@ -137,7 +133,7 @@ def run_test(test_c_file, pipeline_name, pass_plugin_path, clang, opt, env):
         RESULTS_DIR / "outputs" / f"{test_name}_{pipeline_name}.out",
     )
 
-    print(f"{Colors.CYAN}  [1/5] Compiling to LLVM IR...{Colors.NC}")
+    print(f"{Colors.CYAN}  [1/4] Compiling to LLVM IR...{Colors.NC}")
     success, out = run_command(
         [clang, "-O0", "-emit-llvm", "-S", test_c_file, "-o", original_ll], env=env
     )
@@ -145,59 +141,49 @@ def run_test(test_c_file, pipeline_name, pass_plugin_path, clang, opt, env):
         print(f"{Colors.RED}  ✗ Failed to compile to IR:\n{out}{Colors.NC}")
         return False
 
-    print(f"{Colors.CYAN}  [2/5] Applying obfuscation passes...{Colors.NC}")
-    obfuscation_passes = PASS_PIPELINES[pipeline_name]
-    cmd_obfuscate = [
+    print(
+        f"{Colors.CYAN}  [2/4] Applying obfuscation and generating report...{Colors.NC}"
+    )
+
+    # The full pipeline now includes the reporting pass at the end.
+    full_pipeline = f"{PASS_PIPELINES[pipeline_name]},chakravyuha-emit-report"
+    cmd_unified = [
         opt,
         f"-load-pass-plugin={pass_plugin_path}",
-        f"-passes={obfuscation_passes}",
+        f"-passes={full_pipeline}",
         original_ll,
-        "-S",
+        "-S",  # Output textual IR to stdout
     ]
+
     try:
-        with open(obfuscated_ll, "w") as f_ll, open(log_file, "w") as f_log:
-            subprocess.run(
-                [str(c) for c in cmd_obfuscate],
+        # Execute the single command, directing stdout (the IR) to the .ll
+        # file and capturing stderr (the JSON report) in a variable.
+        with open(obfuscated_ll, "w") as f_ll:
+            result = subprocess.run(
+                [str(c) for c in cmd_unified],
                 check=True,
                 text=True,
                 stdout=f_ll,
-                stderr=f_log,
+                stderr=subprocess.PIPE,
                 env=env,
             )
-    except subprocess.CalledProcessError:
-        print(
-            f"{Colors.RED}  ✗ Obfuscation pass failed! Check log for details: {
-                log_file
-            }{Colors.NC}"
-        )
-        return False
 
-    print(f"{Colors.CYAN}  [3/5] Generating report...{Colors.NC}")
-    reporting_passes = f"{obfuscation_passes},chakravyuha-emit-report"
-    cmd_report = [
-        opt,
-        f"-load-pass-plugin={pass_plugin_path}",
-        f"-passes={reporting_passes}",
-        original_ll,
-        "-S",
-        "-o",
-        os.devnull,
-    ]
-    try:
-        result = subprocess.run(
-            [str(c) for c in cmd_report],
-            check=True,
-            text=True,
-            capture_output=True,
-            env=env,
-        )
+        # Write the captured stderr content to the final JSON report file.
         with open(report_json, "w") as f_json:
-            f_json.write(result.stdout)
+            f_json.write(result.stderr)
+
     except subprocess.CalledProcessError as e:
-        print(f"{Colors.RED}  ✗ Report generation pass failed!{Colors.NC}\n{e.stderr}")
+        print(f"{Colors.RED}  ✗ Obfuscation or reporting pass failed!{Colors.NC}")
+        # Write any error output to the log file for debugging
+        with open(log_file, "w") as f_log:
+            f_log.write("--- STDOUT ---\n")
+            f_log.write(e.stdout or "(empty)")
+            f_log.write("\n--- STDERR ---\n")
+            f_log.write(e.stderr or "(empty)")
+        print(f"  Check log for details: {log_file}")
         return False
 
-    print(f"{Colors.CYAN}  [4/5] Compiling binaries...{Colors.NC}")
+    print(f"{Colors.CYAN}  [3/4] Compiling binaries...{Colors.NC}")
     success, out = run_command([clang, original_ll, "-o", original_bin], env=env)
     if not success:
         print(f"{Colors.RED}  ✗ Failed to compile original binary:\n{out}{Colors.NC}")
@@ -207,7 +193,7 @@ def run_test(test_c_file, pipeline_name, pass_plugin_path, clang, opt, env):
         print(f"{Colors.RED}  ✗ Failed to compile obfuscated binary:\n{out}{Colors.NC}")
         return False
 
-    print(f"{Colors.CYAN}  [5/5] Running and comparing output...{Colors.NC}")
+    print(f"{Colors.CYAN}  [4/4] Running and comparing output...{Colors.NC}")
     success, out = run_command([original_bin], log_file=original_out, env=env)
     if not success:
         print(f"{Colors.RED}  ✗ Failed to run original binary:\n{out}{Colors.NC}")
@@ -236,15 +222,8 @@ def main():
     args = parser.parse_args()
 
     if is_wsl():
-        print(
-            f"{
-                Colors.CYAN
-            }WSL environment detected. Sanitizing PATH to prioritize Linux toolchain.{
-                Colors.NC
-            }"
-        )
+        print(f"{Colors.CYAN}WSL environment detected. Sanitizing PATH.{Colors.NC}")
         original_path = os.environ.get("PATH", "")
-        # Keep only paths that are Linux-style (e.g., /usr/bin, not /mnt/c/...)
         linux_paths = [
             p
             for p in original_path.split(os.pathsep)
@@ -269,18 +248,18 @@ def main():
             print(
                 f"{
                     Colors.YELLOW
-                }Warning: Could not find Homebrew LLVM. Assuming 'opt' and 'clang' are in the standard PATH.{
+                }Warning: Could not find Homebrew LLVM. Assuming 'opt' and 'clang' are in PATH.{
                     Colors.NC
                 }"
             )
 
     clang = find_exec(
         "clang",
-        "'clang' not found. In WSL, run: sudo apt install clang. On other systems, check your LLVM installation and PATH.",
+        "'clang' not found. Check your LLVM installation and PATH.",
     )
     opt = find_exec(
         "opt",
-        "'opt' from LLVM not found. In WSL, run: sudo apt install llvm. On other systems, check your LLVM installation and PATH.",
+        "'opt' from LLVM not found. Check your LLVM installation and PATH.",
     )
 
     pass_plugin_path = find_pass_plugin()

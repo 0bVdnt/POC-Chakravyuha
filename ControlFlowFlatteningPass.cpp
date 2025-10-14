@@ -18,6 +18,7 @@
 #include "ChakravyuhaReport.h"
 #include "EmitReportPass.h"
 #include "FakeCodeInsertionPass.h"
+#include "InitialIRMetricsPass.h"
 #include "StringEncryptionPass.h"
 
 using namespace llvm;
@@ -200,8 +201,6 @@ struct ControlFlowFlatteningPass
       if (F.size() < 2)
         continue;
 
-      // Use the shared safety check from the header in addition to the
-      // pass-specific control flow check.
       if (chakravyuha::shouldSkipFunction(F) || hasUnsupportedControlFlow(F)) {
         skippedFunctions++;
         continue;
@@ -219,12 +218,8 @@ struct ControlFlowFlatteningPass
     R.flattenedBlocks += flattenedBlocks;
     R.skippedFunctions += skippedFunctions;
 
-    if (Changed || skippedFunctions > 0) {
-      errs() << "CFF_METRICS:{\"flattenedFunctions\":" << flattenedFunctions
-             << ",\"flattenedBlocks\":" << flattenedBlocks
-             << ",\"skippedFunctions\":" << skippedFunctions << "}\n";
-      if (Changed)
-        return PreservedAnalyses::none();
+    if (Changed) {
+      return PreservedAnalyses::none();
     }
     return PreservedAnalyses::all();
   }
@@ -367,6 +362,10 @@ extern "C" LLVM_ATTRIBUTE_WEAK PassPluginLibraryInfo llvmGetPassPluginInfo() {
             PB.registerPipelineParsingCallback(
                 [](StringRef Name, ModulePassManager &MPM,
                    ArrayRef<PassBuilder::PipelineElement>) {
+                  if (Name == "chakravyuha-initial-metrics") {
+                    MPM.addPass(InitialIRMetricsPass());
+                    return true;
+                  }
                   if (Name == "chakravyuha-control-flow-flatten") {
                     MPM.addPass(ControlFlowFlatteningPass());
                     return true;
@@ -384,6 +383,7 @@ extern "C" LLVM_ATTRIBUTE_WEAK PassPluginLibraryInfo llvmGetPassPluginInfo() {
                     return true;
                   }
                   if (Name == "chakravyuha-all") {
+                    MPM.addPass(InitialIRMetricsPass());
                     MPM.addPass(StringEncryptionPass());
                     MPM.addPass(ControlFlowFlatteningPass());
                     MPM.addPass(FakeCodeInsertionPass());

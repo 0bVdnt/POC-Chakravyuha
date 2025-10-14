@@ -22,18 +22,22 @@ struct ReportData {
   bool enableFakeCodeInsertion = false;
   unsigned cyclesCompleted = 1;
 
-  // String encryption
+  // Total IR size metrics
+  uint64_t originalIRSize = 0;
+  uint64_t obfuscatedIRSize = 0;
+
+  // String encryption metrics
   unsigned stringsEncrypted = 0;
   uint64_t originalIRStringDataSize = 0;
   uint64_t obfuscatedIRStringDataSize = 0;
   std::string stringMethod;
 
-  // Control flow flattening
+  // Control flow flattening metrics
   unsigned flattenedFunctions = 0;
   unsigned flattenedBlocks = 0;
   unsigned skippedFunctions = 0;
 
-  // Fake code insertion
+  // Fake code insertion metrics
   unsigned fakeCodeBlocksInserted = 0;
 
   std::vector<std::string> passesRun;
@@ -44,23 +48,18 @@ struct ReportData {
   }
 };
 
-// Centralized function to detect unsafe constructs. Making it inline prevents
-// linker errors.
+// Centralized function to detect unsafe constructs.
 inline bool shouldSkipFunction(llvm::Function &F) {
   for (llvm::BasicBlock &BB : F) {
     for (llvm::Instruction &I : BB) {
       if (auto *CI = llvm::dyn_cast<llvm::CallInst>(&I)) {
         if (CI->isInlineAsm()) {
-          llvm::errs() << "INFO: Skipping function '" << F.getName()
-                       << "' due to inline assembly.\n";
           return true;
         }
         llvm::Function *CalledFunc = CI->getCalledFunction();
         if (CalledFunc && (CalledFunc->getName() == "setjmp" ||
                            CalledFunc->getName() == "_setjmp" ||
                            CalledFunc->getName() == "longjmp")) {
-          llvm::errs() << "INFO: Skipping function '" << F.getName()
-                       << "' due to setjmp/longjmp.\n";
           return true;
         }
       }
@@ -110,69 +109,98 @@ inline void finalizeDefaults(llvm::Module &M) {
   }
 }
 
+// Helper function to calculate the size of the Module's textual IR
+// representation.
+inline uint64_t getModuleIRSize(llvm::Module &M) {
+  std::string str;
+  llvm::raw_string_ostream os(str);
+  M.print(os, nullptr);
+  os.flush(); // Ensure all data is written to the string
+  return str.size();
+}
+
 inline void emitReportJSON(llvm::Module &M) {
   finalizeDefaults(M);
   auto &R = ReportData::get();
 
-  double changePct = 0.0;
+  // Calculate final IR size at the last possible moment.
+  R.obfuscatedIRSize = getModuleIRSize(M);
+
+  // --- Percentage Change Calculations ---
+  double strChangePct = 0.0;
   if (R.originalIRStringDataSize != 0) {
-    changePct =
+    strChangePct =
         (double)(R.obfuscatedIRStringDataSize - R.originalIRStringDataSize) /
         (double)R.originalIRStringDataSize * 100.0;
   }
-  std::stringstream ss;
-  ss << std::fixed << std::setprecision(2) << changePct;
+  std::stringstream ssString;
+  ssString << std::fixed << std::setprecision(2) << strChangePct;
 
-  llvm::outs() << "{\n";
-  llvm::outs() << "  \"inputFile\": \"" << esc(R.inputFile) << "\",\n";
-  llvm::outs() << "  \"outputFile\": \"" << esc(R.outputFile) << "\",\n";
-  llvm::outs() << "  \"timestamp\": \"" << nowUtcIso8601() << "\",\n";
-  llvm::outs() << "  \"inputParameters\": {\n";
-  llvm::outs() << "    \"obfuscationLevel\": \"" << esc(R.obfuscationLevel)
-               << "\",\n";
-  llvm::outs() << "    \"targetPlatform\": \"" << esc(R.targetPlatform)
-               << "\",\n";
-  llvm::outs() << "    \"enableStringEncryption\": "
-               << (R.enableStringEncryption ? "true" : "false") << ",\n";
-  llvm::outs() << "    \"enableControlFlowFlattening\": "
-               << (R.enableControlFlowFlattening ? "true" : "false") << ",\n";
-  llvm::outs() << "    \"enableFakeCodeInsertion\": "
-               << (R.enableFakeCodeInsertion ? "true" : "false") << "\n";
-  llvm::outs() << "  },\n";
-  llvm::outs() << "  \"outputAttributes\": {\n";
-  llvm::outs() << "    \"originalIRStringDataSize\": \""
-               << R.originalIRStringDataSize << " bytes\",\n";
-  llvm::outs() << "    \"obfuscatedIRStringDataSize\": \""
-               << R.obfuscatedIRStringDataSize << " bytes\",\n";
-  llvm::outs() << "    \"stringDataSizeChange\": \"" << ss.str() << "%\"\n";
-  llvm::outs() << "  },\n";
-  llvm::outs() << "  \"obfuscationMetrics\": {\n";
-  llvm::outs() << "    \"cyclesCompleted\": " << R.cyclesCompleted << ",\n";
-  llvm::outs() << "    \"passesRun\": [";
-  for (size_t i = 0; i < R.passesRun.size(); ++i) {
-    llvm::outs() << "\"" << esc(R.passesRun[i]) << "\"";
-    if (i + 1 < R.passesRun.size())
-      llvm::outs() << ", ";
+  double totalChangePct = 0.0;
+  if (R.originalIRSize != 0) {
+    totalChangePct = ((double)R.obfuscatedIRSize - (double)R.originalIRSize) /
+                     (double)R.originalIRSize * 100.0;
   }
-  llvm::outs() << "],\n";
-  llvm::outs() << "    \"stringEncryption\": {\n";
-  llvm::outs() << "      \"count\": " << R.stringsEncrypted << ",\n";
-  llvm::outs() << "      \"method\": \""
+  std::stringstream ssTotal;
+  ssTotal << std::fixed << std::setprecision(2) << totalChangePct;
+
+  // --- JSON Output to stderr ---
+  llvm::errs() << "{\n";
+  llvm::errs() << "  \"inputFile\": \"" << esc(R.inputFile) << "\",\n";
+  llvm::errs() << "  \"outputFile\": \"" << esc(R.outputFile) << "\",\n";
+  llvm::errs() << "  \"timestamp\": \"" << nowUtcIso8601() << "\",\n";
+  llvm::errs() << "  \"inputParameters\": {\n";
+  llvm::errs() << "    \"obfuscationLevel\": \"" << esc(R.obfuscationLevel)
+               << "\",\n";
+  llvm::errs() << "    \"targetPlatform\": \"" << esc(R.targetPlatform)
+               << "\",\n";
+  llvm::errs() << "    \"enableStringEncryption\": "
+               << (R.enableStringEncryption ? "true" : "false") << ",\n";
+  llvm::errs() << "    \"enableControlFlowFlattening\": "
+               << (R.enableControlFlowFlattening ? "true" : "false") << ",\n";
+  llvm::errs() << "    \"enableFakeCodeInsertion\": "
+               << (R.enableFakeCodeInsertion ? "true" : "false") << "\n";
+  llvm::errs() << "  },\n";
+  llvm::errs() << "  \"outputAttributes\": {\n";
+  llvm::errs() << "    \"originalIRSize\": \"" << R.originalIRSize
+               << " bytes\",\n";
+  llvm::errs() << "    \"obfuscatedIRSize\": \"" << R.obfuscatedIRSize
+               << " bytes\",\n";
+  llvm::errs() << "    \"totalIRSizeChange\": \"" << ssTotal.str() << "%\",\n";
+  llvm::errs() << "    \"originalIRStringDataSize\": \""
+               << R.originalIRStringDataSize << " bytes\",\n";
+  llvm::errs() << "    \"obfuscatedIRStringDataSize\": \""
+               << R.obfuscatedIRStringDataSize << " bytes\",\n";
+  llvm::errs() << "    \"stringDataSizeChange\": \"" << ssString.str()
+               << "%\"\n";
+  llvm::errs() << "  },\n";
+  llvm::errs() << "  \"obfuscationMetrics\": {\n";
+  llvm::errs() << "    \"cyclesCompleted\": " << R.cyclesCompleted << ",\n";
+  llvm::errs() << "    \"passesRun\": [";
+  for (size_t i = 0; i < R.passesRun.size(); ++i) {
+    llvm::errs() << "\"" << esc(R.passesRun[i]) << "\"";
+    if (i + 1 < R.passesRun.size())
+      llvm::errs() << ", ";
+  }
+  llvm::errs() << "],\n";
+  llvm::errs() << "    \"stringEncryption\": {\n";
+  llvm::errs() << "      \"count\": " << R.stringsEncrypted << ",\n";
+  llvm::errs() << "      \"method\": \""
                << esc(R.stringMethod.empty() ? "N/A" : R.stringMethod)
                << "\"\n";
-  llvm::outs() << "    },\n";
-  llvm::outs() << "    \"controlFlowFlattening\": {\n";
-  llvm::outs() << "      \"flattenedFunctions\": " << R.flattenedFunctions
+  llvm::errs() << "    },\n";
+  llvm::errs() << "    \"controlFlowFlattening\": {\n";
+  llvm::errs() << "      \"flattenedFunctions\": " << R.flattenedFunctions
                << ",\n";
-  llvm::outs() << "      \"flattenedBlocks\": " << R.flattenedBlocks << ",\n";
-  llvm::outs() << "      \"skippedFunctions\": " << R.skippedFunctions << "\n";
-  llvm::outs() << "    },\n";
-  llvm::outs() << "    \"fakeCodeInsertion\": {\n";
-  llvm::outs() << "      \"insertedBlocks\": " << R.fakeCodeBlocksInserted
+  llvm::errs() << "      \"flattenedBlocks\": " << R.flattenedBlocks << ",\n";
+  llvm::errs() << "      \"skippedFunctions\": " << R.skippedFunctions << "\n";
+  llvm::errs() << "    },\n";
+  llvm::errs() << "    \"fakeCodeInsertion\": {\n";
+  llvm::errs() << "      \"insertedBlocks\": " << R.fakeCodeBlocksInserted
                << "\n";
-  llvm::outs() << "    }\n";
-  llvm::outs() << "  }\n";
-  llvm::outs() << "}\n";
+  llvm::errs() << "    }\n";
+  llvm::errs() << "  }\n";
+  llvm::errs() << "}\n";
 }
 
 } // namespace chakravyuha

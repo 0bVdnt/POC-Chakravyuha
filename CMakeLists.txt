@@ -16,6 +16,7 @@ add_library(ChakravyuhaPasses SHARED
     StringEncryptionPass.cpp
     EmitReportPass.cpp
     FakeCodeInsertionPass.cpp
+    InitialIRMetricsPass.cpp
 )
 
 target_link_libraries(ChakravyuhaPasses PRIVATE LLVM)
