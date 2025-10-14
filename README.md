@@ -1,196 +1,178 @@
 # Chakravyuha: An Intelligent C/C++ Obfuscation Engine
 
+[![Top Language](https://img.shields.io/github/languages/top/0bvdnt/poc-chakravyuha?style=for-the-badge&color=blue)](https://github.com/0bvdnt/poc-chakravyuha)
+[![LLVM Version](https://img.shields.io/badge/LLVM-20.1+-blueviolet?style=for-the-badge&logo=llvm)](https://llvm.org/)
+[![Last Commit](https://img.shields.io/github/last-commit/0bvdnt/poc-chakravyuha?style=for-the-badge&color=brightgreen)](https://github.com/0bvdnt/poc-chakravyuha/commits/main)
+[![Repository Size](https://img.shields.io/github/repo-size/0bvdnt/poc-chakravyuha?style=for-the-badge)](https://github.com/0bvdnt/poc-chakravyuha)
 [![License: AGPL v3](https://img.shields.io/badge/License-AGPL%20v3-blue.svg)](https://www.gnu.org/licenses/agpl-3.0)
 [![Build Status](https://img.shields.io/badge/build-passing-brightgreen.svg)](https://github.com/0bvdnt/poc-chakravyuha)
-[![Platform](https://img.shields.io/badge/platform-Linux%20%7C%20Windows%20%7C%20macOS-orange.svg)](https://github.com/0bvdnt/poc-chakravyuha)
+[![Platform](https://img.shields.io/badge/platform-Linux%20%7C%20Windows%20%7C%20macOS-orange.svg)](https://github.com/0bVdnt/LLVM-Passes/tree/main/ChakraPasses)
 
-## Introduction
+## 1. Introduction
 
-Chakravyuha is an obfuscation framework for C/C++ applications, designed to provide robust protection for software intellectual property (IP). The primary objective of this project is to mitigate threats from reverse engineering, unauthorized modification, and software piracy. By leveraging the LLVM compiler infrastructure, Chakravyuha implements a series of code transformations that obscure program logic and conceal sensitive data, thereby increasing the complexity and cost of static and dynamic analysis for adversaries.
+Chakravyuha is a powerful suite of code obfuscation passes for the LLVM compiler infrastructure. It is engineered as a cross-platform tool that transforms C/C++ source code at the Intermediate Representation (IR) level to produce executables that are significantly more resistant to reverse engineering, static analysis, and tampering.
 
-This repository contains a Proof-of-Concept (PoC) that demonstrates a core obfuscation technique: string literal encryption implemented as an LLVM pass. The framework is designed to be extensible, with a long-term vision of incorporating intelligent, adaptive obfuscation strategies.
-
----
-
-## Technical Objectives and Features
-
-The Chakravyuha engine is architected to evolve beyond static obfuscation patterns into an intelligent system that tailors its transformations based on code analysis.
-
-- **Adaptive Obfuscation Strategy:** The system is designed to eventually incorporate a heuristic or model-driven pass manager that analyzes the Abstract Syntax Tree (AST) or LLVM Intermediate Representation (IR) to apply the most effective sequence of obfuscation techniques for a given code structure.
-
-- **Control Flow Flattening:** This technique obscures the natural control flow of a program by transforming function bodies into a single dispatcher loop with a state variable, making the logical sequence of operations difficult to follow.
-
-- **Bogus Code Insertion:** Involves the injection of semantically inert but computationally complex code blocks to mislead static analysis and increase the cognitive load on a human analyst.
-
-- **String Literal Encryption:** Protects embedded constants such as API keys, credentials, and proprietary messages from being identified through static analysis of the binary. The PoC implements this feature via XOR encryption with a runtime decryption stub.
-
-- **Anti-Analysis Defenses:** The architecture includes provisions for injecting environmental checks to detect and react to the presence of debuggers, virtual machines, and other analysis tools, thereby impeding dynamic analysis.
-
-- **Quantitative Reporting:** The framework will generate structured JSON reports that provide detailed metrics on the applied transformations, offering a quantitative measure of the obfuscation's impact on the binary.
-
-- **LLVM-Based Architecture:** The solution is built upon the LLVM compiler framework, ensuring a modular, maintainable, and robust design that can operate on a standardized Intermediate Representation.
-
-## System Requirements and Setup
-
-This section provides instructions for configuring the necessary development environment and compiling the LLVM pass.
-
-### Prerequisites
-
-A complete LLVM and Clang development environment is required to build and run the obfuscation pass.
-
-- **CMake** (version 3.13 or newer)
-- **A C++ compiler** (Clang, GCC, or MSVC)
-- **LLVM and Clang** (A newer version (20.1.0 or above) is recommended)
+By integrating directly into the modern LLVM toolchain, Chakravyuha provides a robust and modular framework for protecting software intellectual property (IP), securing sensitive algorithms, and hardening applications against unauthorized analysis.
 
 ---
 
-#### On Linux (Debian/Ubuntu)
+## 2. Key Features & Capabilities
+
+Chakravyuha's strength lies in its layered, multi-faceted approach to obfuscation. Each pass is designed to counter specific reverse engineering techniques, and when combined, they create a formidable defensive barrier.
+
+### Advanced String Encryption
+
+This is not a simple XOR cipher. The `chakravyuha-string-encrypt` pass implements a highly resilient, multi-layered scheme to protect sensitive embedded strings like API keys, credentials, and proprietary messages.
+
+- **Polymorphic Encryption Engine:** At compile time, the pass randomly selects one of several different encryption ciphers (`XOR`, `ADD`, `SUB`, `S-Box Substitution`) for each individual string. This polymorphism means that even if an attacker breaks the encryption for one string, that knowledge cannot be used to decrypt others.
+- **Per-String Static Keys:** A unique, cryptographically random key is generated for every single string. This key is then cleverly obfuscated and embedded within its corresponding decryption stub. This architecture eliminates the risk of a single "master key" being discovered and used to compromise all secrets.
+- **Just-in-Time, On-Demand Decryption:** To defeat memory scanners and simple dynamic analysis, strings are **not** decrypted all at once. A unique decryption routine is executed only the very first time a string is accessed during runtime. Before that, the string exists only in its encrypted form in memory.
+- **Self-Modifying Pointers for Performance:** The on-demand decryption is achieved with minimal performance overhead. Access to a string is replaced by a call through a function pointer. Initially, this pointer calls a "slow" function that decrypts the string and then **atomically overwrites the pointer** to a new "fast" function. All subsequent calls go directly to the fast function, which simply returns the already-decrypted string, making the one-time decryption cost negligible.
+
+### Control Flow Flattening
+
+The `chakravyuha-control-flow-flatten` pass is designed to completely dismantle the logical structure of a function, making it incredibly difficult for a human or a decompiler to understand.
+
+- **State Machine Transformation:** The pass deconstructs a function's natural control flow (e.g., `if`/`else` branches, `for`/`while` loops) and rebuilds it as a large, flat state machine. All the original code blocks are placed as cases within a central `switch` statement inside a dispatcher loop.
+- **State Variable Control:** Instead of direct jumps and calls, the program's execution path is determined by a state variable. At the end of each logical block, this variable is updated to point to the next block, and control returns to the central dispatcher. This transforms a clear, readable Control Flow Graph (CFG) into a "spaghetti-like" structure that is bewildering to analyze.
+- **Robust and Safe:** The pass is engineered for stability. It automatically detects and skips functions that contain constructs incompatible with flattening (like inline assembly or `setjmp`/`longjmp`), ensuring that the obfuscation process does not break the build or introduce runtime errors.
+
+### Fake Code Insertion
+
+To further confuse and mislead reverse engineers, the `chakravyuha-fake-code-insertion` pass pollutes the binary with deceptive but non-functional code.
+
+- **Opaque Predicates:** The pass injects junk code blocks using conditional branches that are guaranteed to never be taken at runtime. These "opaque predicates" (e.g., `if (x != x)`) are difficult for static analysis tools to prove as dead code, forcing them to analyze the junk blocks as if they were part of the real program logic.
+- **Computationally Complex Junk:** The inserted blocks are not empty. They are filled with a series of computationally intensive but ultimately meaningless arithmetic and bitwise operations. This creates the illusion of complex algorithms, wasting an analyst's time and drawing their attention away from the code that actually matters.
+
+### Quantitative and Visual Reporting
+
+To measure the effectiveness of the obfuscations, Chakravyuha provides a powerful reporting framework.
+
+- **Detailed JSON Metrics:** A structured JSON file is generated, providing hard data on the applied transformations. This includes metrics like the number of functions flattened, fake blocks inserted, strings encrypted, and the percentage change in both IR data and final binary size.
+- **Interactive HTML Visual Report:** A dynamic `index.html` report is created to provide a clear, side-by-side visual comparison of a function's Control Flow Graph (CFG) before and after obfuscation. This allows developers to instantly see and appreciate the structural complexity introduced by the flattening pass.
+
+---
+
+## 3. Prerequisites & Installation
+
+Before you begin, ensure you have the required development tools for your platform.
+
+### Windows (using MSYS2)
+
+Using the [MSYS2](https://www.msys2.org/) environment is recommended. After installing, open the **UCRT64** terminal and run:
 
 ```bash
-sudo apt-get update
-sudo apt-get install cmake build-essential clang llvm-dev
+# 1. Update package database and base packages
+pacman -Syu
+
+# 2. Install required development toolchain and libraries
+pacman -S --needed \
+    make git python3 \
+    mingw-w-ucrt-x86_64-toolchain \
+    mingw-w-ucrt-x86_64-cmake \
+    mingw-w-ucrt-x86_64-llvm \
+    mingw-w-ucrt-x86_64-graphviz
+```
+
+### Ubuntu / Debian
+
+```bash
+sudo apt-get update && sudo apt-get install -y \
+    build-essential cmake git python3 llvm clang graphviz
+```
+
+### macOS (using Homebrew)
+
+```bash
+# 1. Install Homebrew if you haven't already
+/bin/bash -c "$(curl -fsSL https://raw.githubusercontent.com/Homebrew/install/HEAD/install.sh)"
+
+# 2. Install required packages
+brew install cmake git python llvm graphviz
 ```
 
 ---
 
-#### On Windows
+## 4. Build Instructions
 
-Setting up a C++ development environment on Windows requires a compiler toolchain in addition to LLVM and CMake. You have two primary options. **Option 1 is recommended for most users.**
+The project uses CMake for a unified, cross-platform build process.
 
-##### **Option 1: Using MSYS2 and MinGW-w64 (Recommended)**
+1.  **Clone the repository:**
 
-1.  **Install MSYS2**
-    - Download and install MSYS2 from the official website: [msys2.org](https://www.msys2.org/).
-    - After installation, open the MSYS2 terminal and update the core packages:
+    ```bash
+    git clone https://github.com/0bvdnt/poc-chakravyuha.git
+    cd poc-chakravyuha
+    ```
+
+2.  **Create and enter a build directory:**
+
+    ```bash
+    mkdir build && cd build
+    ```
+
+3.  **Configure the project with CMake:**
+    - **On Linux/MSYS2:**
       ```bash
-      pacman -Syu
-      # Close the terminal and re-open if prompted, then run again
-      pacman -Su
+      cmake ..
+      ```
+    - **On macOS (with Homebrew LLVM):**
+      ```bash
+      cmake -D LLVM_DIR=$(brew --prefix llvm)/lib/cmake/llvm ..
       ```
 
-2.  **Install Development Tools**
-    - In the MSYS2 terminal, install the complete Clang/LLVM toolchain and CMake. We recommend the `UCRT64` environment as it uses the modern, standards-compliant C runtime from Microsoft.
-      ```bash
-      # This is the recommended command
-      pacman -S --needed base-devel mingw-w64-ucrt-x86_64-toolchain mingw-w64-ucrt-x86_64-clang mingw-w64-ucrt-x86_64-llvm mingw-w64-ucrt-x86_64-cmake mingw-w64-ucrt-x86_64-ninja
-      ```
-    - > **Note:** You must use the corresponding MSYS2 terminal for the environment you choose. The `UCRT64` packages require the **"MSYS2 UCRT64"** terminal. The older `MINGW64` environment (which uses the legacy `msvcrt.dll` runtime) may also work for this project but is not the recommended choice for modern development.
-
-3.  **Verify the Installation**
-    - From the Start Menu, open the **"MSYS2 UCRT64"** terminal (or the "MSYS2 MINGW64" terminal if you chose the older environment).
-    - In this new terminal, verify that the tools are available by running `clang --version`, `opt --version`, and `cmake --version`.
-
-##### **Option 2: Using Visual Studio Build Tools**
-
-1.  **Install Visual Studio Build Tools**
-    - Download the **Visual Studio Installer** from the [Visual Studio website](https://visualstudio.microsoft.com/downloads/).
-    - Run the installer. You do not need the full Visual Studio IDE.
-    - Go to the **"Workloads"** tab and select **"Desktop development with C++"**. This will automatically include the necessary C++ compiler, linker, and Windows SDK.
-    - Click "Install".
-
-2.  **Install LLVM**
-    - Download the latest **LLVM official release for Windows** from the [LLVM GitHub Releases page](https://github.com/llvm/llvm-project/releases).
-    - Look for the asset named `LLVM-x.y.z-win64.exe`.
-    - Run the installer. During installation, it is **critical** that you check the box for **"Add LLVM to the system PATH for all users"**.
-
-3.  **Verify the Installation**
-    - Open the **"Developer Command Prompt for VS 2022"** (or your version).
-    - In this special terminal, verify that the tools are available by running `clang --version`, `opt --version`, and `cmake --version`.
-
+4.  **Compile the pass library:**
+    `bash
+cmake --build . --config Release
+`
+    After a successful build, the pass library (`ChakravyuhaPasses.dll`, `.so`, or `.dylib`) will be located in the `build/lib/` directory.
 
 ---
 
-#### On macOS (via Homebrew)
+## 5. Usage Instructions
 
-```bash
-brew install llvm cmake
-```
-_Note: Homebrew's LLVM is "keg-only." Follow the instructions provided by `brew info llvm` to configure your environment paths._
+All testing and visualization is handled by two cross-platform Python scripts.
 
-## Build Instructions
+### Step 1: Run the Test Suite
 
-The build process is now unified across all platforms thanks to CMake.
+This script automatically compiles, obfuscates, and verifies all test cases, providing a comprehensive functional check.
 
-```bash
-# 1. Clone the project repository
-git clone https://github.com/0bvdnt/poc-chakravyuha.git
-cd poc-chakravyuha
+- **To run the full suite of obfuscations (recommended):**
+  ```bash
+  python3 run_tests.py --pipeline full
+  ```
+- **To run only a specific pass (e.g., `cff` for control flow flattening):**
+  ```bash
+  python3 run_tests.py --pipeline cff
+  ```
+  (Available pipelines: `full`, `cff`, `string`, `fake`).
 
-# 2. Create and navigate to a build directory
-mkdir build
-cd build
+### Step 2: Visualize the Results
 
-# 3. Configure the project with CMake
-#    On Windows, you may need to specify the generator, e.g.,
-#    cmake -G "Ninja" ..
-#    cmake -G "Visual Studio 17 2022" ..
-cmake ..
+After running the tests, generate an interactive HTML report to see the results.
 
-# 4. Compile the LLVM pass
-#    This generates the shared library (.so or .dll) in the build/lib/ directory.
-cmake --build .
-```
+- **To generate the report and open it in your browser:**
+  ```bash
+  python3 create_comparison.py view
+  ```
 
-A successful compilation will produce the pass library (e.g., `build/lib/ChakravyuhaStringEncryptionPass.so` or `build/lib/ChakravyuhaStringEncryptionPass.dll`).
+This will create the report at `test_results/visualizations/comparison/index.html`.
 
-## Usage Instructions
+---
 
-After successfully building the pass, use the provided scripts from the **project's root directory** to apply the obfuscation to the sample program (`test_program.c`).
+## 6. Development Roadmap
 
-### On Linux or macOS
-
-```bash
-# First, make the script executable
-chmod +x scripts/run_obfuscation.sh
-
-# Run the full obfuscation pipeline
-./scripts/run_obfuscation.sh
-
-# or
-
-./scripts/run_obfuscation.sh "string_to_find_in_the_binary"
-```
-
-### On Windows (Command Prompt or PowerShell)
-
-```powershell
-# Run the full obfuscation pipeline
-.\scripts\run_obfuscation.bat
-
-# or
-.\scripts\run_obfuscation.bat "string_to_find_in_the_binary"
-```
-_Note: If no argument is provided, the default string "SUPER_SECRET_STRING" will be used._
-
-
-These scripts automate the following sequence:
-1.  **IR Generation**: Compiles `test_program.c` to LLVM Intermediate Representation.
-2.  **Obfuscation Pass**: Executes the `opt` tool to load your compiled pass and apply it to the IR.
-3.  **Binary Compilation**: Compiles the obfuscated LLVM IR into a native executable.
-4.  **Execution**: Runs the final obfuscated binary to demonstrate its functional correctness.
-
-### Verification of Results
-
-After running the script, you can confirm the efficacy of the obfuscation:
-
-1.  **Functional Test:** The script will automatically run the final binary. The expected output is `SUPER_SECRET_STRING`. This confirms that the runtime decryption works correctly.
-
-2.  **Static Analysis:** The script will also run the `strings` utility on the final binary. The output should not contain the plaintext literal "SUPER_SECRET_STRING", confirming that the string is hidden.
-
-3.  **Review the Obfuscation Report:** Examine the contents of `build/report.json` for a detailed summary of the applied transformations and their corresponding metrics.
-
-## Development Roadmap
-
-This Proof-of-Concept serves as the foundation for a more comprehensive obfuscation tool. Future work will focus on the implementation of the following modules:
-
-- [ ] **Control Flow Flattening Pass**
-- [ ] **Bogus Code Insertion Pass**
+- [x] **Control Flow Flattening Pass**
+- [x] **Bogus Code Insertion Pass**
+- [x] **Advanced String Encryption Pass** (Polymorphic, Per-String Static Keys)
+- [x] **Cross-Platform Support (Windows, Linux, macOS)**
+- [x] **Quantitative & Visual Reporting Framework**
 - [ ] **Anti-Debug and Anti-VM Instrumentation Pass**
 - [ ] **A Heuristic-Based Pass Manager** for automated selection and sequencing of obfuscation passes.
-- [x] **Support for the Windows PE file format**.
-- [ ] **Implementation of dynamic and context-aware encryption keys**.
+- [ ] **Implementation of dynamic and context-aware encryption keys** (e.g., keys derived from the runtime environment).
 
-## License
+---
+
+## 7. License
 
 This project is distributed under a dual-license model.
 
