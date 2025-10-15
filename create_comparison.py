@@ -239,41 +239,58 @@ def create_comparison_html():
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Chakravyuha - Visual Comparison Report</title>
     <style>
+        :root {{
+            --bg-color: #f8f9fa;
+            --container-bg: #ffffff;
+            --header-bg: #2c3e50;
+            --text-color: #343a40;
+            --primary-color: #3498db;
+            --primary-hover: #2980b9;
+            --border-color: #dee2e6;
+            --error-color: #e74c3c;
+        }}
         * {{ margin: 0; padding: 0; box-sizing: border-box; }}
-        body {{ font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif; background: linear-gradient(135deg, #f5f7fa 0%, #c3cfe2 100%); color: #2c3e50; padding: 20px; min-height: 100vh; }}
-        .container {{ max-width: 1600px; margin: 0 auto; background: white; border-radius: 16px; box-shadow: 0 20px 60px rgba(0, 0, 0, 0.15); overflow: hidden; }}
-        .header {{ background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); color: white; padding: 50px 40px; text-align: center; }}
-        h1 {{ font-size: 3em; margin-bottom: 12px; font-weight: 700; text-shadow: 0 2px 10px rgba(0,0,0,0.2); }}
-        .header p {{ font-size: 1.3em; opacity: 0.95; }}
-        .controls {{ padding: 30px; background: #f8f9fa; border-bottom: 2px solid #e9ecef; display: flex; gap: 20px; align-items: center; flex-wrap: wrap; }}
-        .controls select, .controls button {{ padding: 14px 24px; border-radius: 10px; border: 2px solid #dee2e6; background: white; font-size: 16px; font-weight: 500; cursor: pointer; transition: all 0.3s ease; box-shadow: 0 2px 5px rgba(0,0,0,0.05); }}
+        body {{ font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif; background-color: var(--bg-color); color: var(--text-color); padding: 20px; min-height: 100vh; }}
+        .container {{ max-width: 1600px; margin: 0 auto; background: var(--container-bg); border-radius: 8px; box-shadow: 0 6px 20px rgba(0, 0, 0, 0.08); overflow: hidden; }}
+
+        .header {{ background-color: var(--header-bg); color: white; padding: 2rem; text-align: center; }}
+        .header .logo {{ width: 150px; height: 150px; margin: 0 auto 1rem; border-radius: 8px; display: block; }}
+        .header .tagline {{ font-style: italic; font-size: 1.2rem; margin-top: 0; margin-bottom: 0.25rem; color: #ecf0f1; }}
+        .header p {{ margin: 0; color: #bdc3c7; }}
+        h1 {{ font-size: 2em; margin-top: 1rem; font-weight: 600; }}
+
+        .controls {{ padding: 20px; background: #fdfdff; border-bottom: 1px solid var(--border-color); display: flex; gap: 20px; align-items: center; flex-wrap: wrap; }}
+        .controls select, .controls button {{ padding: 10px 18px; border-radius: 6px; border: 1px solid var(--border-color); background: white; font-size: 16px; font-weight: 500; cursor: pointer; transition: all 0.2s ease; }}
         .controls select {{ min-width: 250px; }}
-        .controls select:hover, .controls select:focus {{ border-color: #667eea; outline: none; box-shadow: 0 4px 12px rgba(102, 126, 234, 0.2); }}
-        .controls button {{ background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); color: white; border: none; font-weight: 600; }}
-        .controls button:hover {{ transform: translateY(-2px); box-shadow: 0 6px 20px rgba(102, 126, 234, 0.4); }}
-        .metrics {{ padding: 40px; background: linear-gradient(135deg, #f5f7fa 0%, #e9ecef 100%); display: none; border-bottom: 2px solid #dee2e6; }}
+        .controls select:hover, .controls select:focus {{ border-color: var(--primary-color); outline: none; box-shadow: 0 0 0 3px rgba(52, 152, 219, 0.1); }}
+        .controls button {{ background-color: var(--primary-color); color: white; border-color: var(--primary-color); }}
+        .controls button:hover {{ background-color: var(--primary-hover); border-color: var(--primary-hover); }}
+
+        .metrics {{ padding: 25px; background-color: #fdfdff; display: none; border-bottom: 1px solid var(--border-color); }}
         .metrics.show {{ display: block; }}
-        .metrics-grid {{ display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 25px; }}
-        .metric-card {{ background: white; padding: 25px; border-radius: 14px; text-align: center; box-shadow: 0 6px 20px rgba(0, 0, 0, 0.08); transition: all 0.3s ease; border: 1px solid #e9ecef; }}
-        .metric-card:hover {{ transform: translateY(-5px); box-shadow: 0 12px 30px rgba(0, 0, 0, 0.15); }}
-        .metric-card .value {{ font-size: 2.2em; font-weight: 700; background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); -webkit-background-clip: text; -webkit-text-fill-color: transparent; background-clip: text; margin-bottom: 10px; }}
-        .metric-card .value.small-text {{ font-size: 1.1em; line-height: 1.5; font-weight: 500; color: #2c3e50; -webkit-text-fill-color: initial; }}
-        .metric-card .label {{ color: #495057; margin-top: 8px; font-size: 0.9em; font-weight: 600; text-transform: uppercase; letter-spacing: 0.5px; }}
-        .metric-card .sub-label {{ color: #6c757d; font-size: 0.8em; margin-top: 6px; font-weight: 400; }}
-        .comparison-container {{ padding: 40px; }}
+        .metrics-grid {{ display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 20px; }}
+        .metric-card {{ background: var(--bg-color); padding: 20px; border-radius: 8px; text-align: center; border: 1px solid var(--border-color); }}
+        .metric-card .value {{ font-size: 2em; font-weight: 600; color: var(--primary-color); margin-bottom: 8px; }}
+        .metric-card .value.small-text {{ font-size: 1.1em; line-height: 1.4; font-weight: 500; color: var(--text-color); }}
+        .metric-card .label {{ color: #495057; font-size: 0.9em; font-weight: 600; text-transform: uppercase; letter-spacing: 0.5px; }}
+        .metric-card .sub-label {{ color: #6c757d; font-size: 0.8em; margin-top: 4px; }}
+
+        .comparison-container {{ padding: 30px; }}
         .image-container {{ display: flex; gap: 30px; justify-content: center; align-items: flex-start; min-height: 400px; }}
         .image-wrapper {{ flex: 1; text-align: center; max-width: 50%; }}
-        .image-wrapper h3 {{ margin-bottom: 20px; color: #2c3e50; font-size: 1.6em; font-weight: 700; padding: 15px; background: linear-gradient(135deg, #f8f9fa 0%, #e9ecef 100%); border-radius: 10px; border-left: 5px solid #667eea; }}
-        .image-wrapper img {{ max-width: 100%; height: auto; border: 3px solid #dee2e6; border-radius: 12px; background: white; box-shadow: 0 10px 30px rgba(0,0,0,0.1); }}
-        .no-data {{ text-align: center; padding: 80px 40px; color: #6c757d; font-size: 1.4em; font-weight: 500; }}
-        .footer {{ padding: 30px; text-align: center; background: linear-gradient(135deg, #2c3e50 0%, #34495e 100%); color: #ecf0f1; font-size: 1em; }}
+        .image-wrapper h3 {{ margin-bottom: 15px; color: var(--header-bg); font-size: 1.4em; font-weight: 600; padding-bottom: 10px; border-bottom: 2px solid var(--border-color); }}
+        .image-wrapper img {{ max-width: 100%; height: auto; border: 1px solid var(--border-color); border-radius: 8px; background: white; box-shadow: 0 4px 15px rgba(0,0,0,0.07); }}
+
+        .no-data {{ text-align: center; padding: 80px 40px; color: #6c757d; font-size: 1.2em; }}
+        .footer {{ padding: 20px; text-align: center; background-color: var(--header-bg); color: #bdc3c7; font-size: 0.9em; border-top: 1px solid var(--border-color);}}
     </style>
 </head>
 <body>
     <div class="container">
         <div class="header">
-            <h1>🔒 Chakravyuha Obfuscation Report</h1>
-            <p>Visual Comparison of Original vs. Obfuscated Control Flow Graphs</p>
+            <img src="../../../assets/chakravyuha_logo.png" alt="Chakravyuha Logo" class="logo">
+            <p class="tagline">The Impenetrable Code Formation</p>
+            <h1>Visual Comparison Report</h1>
         </div>
         <div class="controls">
             <select id="testSelect"><option value="">Select a test...</option>{test_options}</select>
@@ -320,8 +337,10 @@ def create_comparison_html():
                     funcSelect.appendChild(option);
                 }});
                 if (functions.length > 0) {{
-                    funcSelect.value = functions[0];
-                    currentFunction = functions[0];
+                    // Auto-select the first function (often 'main')
+                    const mainFunc = functions.find(f => tests[currentTest][f].display_name === 'main') || functions[0];
+                    funcSelect.value = mainFunc;
+                    currentFunction = mainFunc;
                 }}
             }}
         }}
@@ -365,7 +384,17 @@ def create_comparison_html():
                 metricsGrid.innerHTML = `<div class="metric-card" style="grid-column: 1 / -1;"><div class="label">No report data. Select a test to see its metrics.</div></div>`;
             }}
         }}
-        updateMetrics(); // Initial call
+
+        // Initial setup
+        (function() {{
+            if (testSelect.options.length > 1) {{
+                testSelect.value = testSelect.options[1].value;
+                currentTest = testSelect.value;
+                updateFunctionList();
+                updateDisplay();
+            }}
+            updateMetrics();
+        }})();
     </script>
 </body>
 </html>"""
