@@ -1,11 +1,8 @@
-// test_complex.c - Complex control flow patterns
 #include <stdio.h>
-#include <stdlib.h>
 
 int complex_control_flow(int x, int y, int z) {
   int result = 0;
   int temp = 0;
-  // Multiple entry points to loops
   if (x > 0) {
     goto middle;
   }
@@ -72,7 +69,6 @@ int short_circuit_evaluation(int x, int y, int z) {
     result = -1;
   }
 
-  // Ternary operators
   result = (result > 100) ? 100 : (result < 0) ? 0 : result;
 
   return result;

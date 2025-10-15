@@ -1,5 +1,4 @@
 #include <stdio.h>
-// example.cpp
 int test_function(int a) {
   int x = 0;
   if (a > 10) {

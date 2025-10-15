@@ -1,4 +1,3 @@
-// test_recursive.c - Recursive functions (should be skipped by pass)
 #include <stdio.h>
 
 int factorial(int n) {
@@ -21,7 +20,6 @@ int ackermann(int m, int n) {
   return ackermann(m - 1, ackermann(m, n - 1));
 }
 
-// Mutual recursion
 int is_even(int n);
 int is_odd(int n);
 

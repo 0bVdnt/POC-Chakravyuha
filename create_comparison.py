@@ -43,23 +43,34 @@ def format_bytes(size):
     if size is None or size < 0:
         return "n/a"
     if size == 0:
-        return "0 b"
+        return "0 B"
     power = 1024
     n = 0
-    labels = {0: "b", 1: "kb", 2: "mb", 3: "gb", 4: "tb"}
+    labels = {0: "B", 1: "KB", 2: "MB", 3: "GB", 4: "TB"}
     while size >= power and n < len(labels) - 1:
         size /= power
         n += 1
-    return f"{int(size)} {labels[n]}" if n == 0 else f"{size:.2f} {labels[n]}"
+    return f"{size:.2f} {labels[n]}"
+
+
+def sanitize_func_name(name):
+    """Replaces characters invalid in filenames with underscores."""
+    return name.replace(":", "_").replace("<", "_").replace(">", "_").replace(" ", "_")
+
+
+def desanitize_func_name(name):
+    return name.replace("__", "::")
 
 
 # --- parallel rendering task ---
-def render_dot_to_png(dot_file, dot_executable):
+def render_dot_to_png(dot_file_info):
+    dot_file, dot_executable = dot_file_info
     is_original = dot_file.parent.name == "original"
     viz_dir = (
         results_dir / "visualizations" / ("original" if is_original else "obfuscated")
     )
     png_file = viz_dir / f"{dot_file.stem}.png"
+
     subprocess.run(
         [dot_executable, "-Tpng", str(dot_file), "-o", str(png_file)],
         stdout=subprocess.DEVNULL,
@@ -91,14 +102,10 @@ def generate_visualizations():
         )
         return False
 
-    orig_dot_dir, obf_dot_dir = (
-        results_dir / "dot_files" / "original",
-        results_dir / "dot_files" / "obfuscated",
-    )
-    orig_viz_dir, obf_viz_dir = (
-        results_dir / "visualizations" / "original",
-        results_dir / "visualizations" / "obfuscated",
-    )
+    orig_dot_dir = results_dir / "dot_files" / "original"
+    obf_dot_dir = results_dir / "dot_files" / "obfuscated"
+    orig_viz_dir = results_dir / "visualizations" / "original"
+    obf_viz_dir = results_dir / "visualizations" / "obfuscated"
     for d in [orig_dot_dir, obf_dot_dir, orig_viz_dir, obf_viz_dir]:
         d.mkdir(parents=True, exist_ok=True)
 
@@ -108,7 +115,7 @@ def generate_visualizations():
 
     for ll_file in ll_dir.glob("*.ll"):
         subprocess.run(
-            [opt, "-passes=dot-cfg", str(ll_file), "-o", os.devnull],
+            [opt, "-passes=dot-cfg", str(ll_file)],
             stdout=subprocess.DEVNULL,
             stderr=subprocess.DEVNULL,
             cwd=script_dir,
@@ -118,29 +125,27 @@ def generate_visualizations():
         is_obfuscated = any(
             f"_{suf}" in test_name for suf in ["cff", "string", "fake", "full"]
         )
+        target_dir = obf_dot_dir if is_obfuscated else orig_dot_dir
+        base_name = "_".join(test_name.split("_")[:-1]) if is_obfuscated else test_name
 
         for dot_file in script_dir.glob("*.dot"):
             func_name = dot_file.stem.strip(".")
-            base_name = (
-                "_".join(test_name.split("_")[:-1]) if is_obfuscated else test_name
-            )
-            new_name = f"{base_name}_{func_name}.dot"
-            target_dir = obf_dot_dir if is_obfuscated else orig_dot_dir
+            sanitized_name = sanitize_func_name(func_name)
+            new_name = f"{base_name}_{sanitized_name}.dot"
             dot_file.rename(target_dir / new_name)
 
     print("rendering cfg images in parallel...")
-    all_dots = [
-        f
-        for d in [orig_dot_dir, obf_dot_dir]
-        for f in d.glob("*.dot")
-        if not any(n in f.stem for n in ["chakravyuha_", "dispatch_"])
-    ]
+    all_dots = list(orig_dot_dir.glob("*.dot")) + list(obf_dot_dir.glob("*.dot"))
+    if not all_dots:
+        print("Warning: No .dot files found to render.")
+        return True
 
     with ProcessPoolExecutor() as executor:
+        tasks = [(dot_file, dot) for dot_file in all_dots]
         list(
             tqdm(
-                executor.map(render_dot_to_png, all_dots, [dot] * len(all_dots)),
-                total=len(all_dots),
+                executor.map(render_dot_to_png, tasks),
+                total=len(tasks),
                 desc="rendering images",
             )
         )
@@ -151,29 +156,32 @@ def generate_visualizations():
 
 def create_comparison_html():
     print("generating interactive html report...")
-    results_dir = Path("test_results")
-    viz_dir = Path("test_results/visualizations")
-    comparison_dir = viz_dir / "comparison"
+    comparison_dir = results_dir / "visualizations" / "comparison"
     comparison_dir.mkdir(parents=True, exist_ok=True)
 
     tests = {}
-    orig_dir = viz_dir / "original"
-    obf_dir = viz_dir / "obfuscated"
-    known_test_names = sorted(
-        [p.stem for p in (project_root / "tests").glob("test_*.c")]
-    )
+    orig_dir = results_dir / "visualizations" / "original"
+    obf_dir = results_dir / "visualizations" / "obfuscated"
+
+    c_test_files = (project_root / "tests").glob("test_*.c")
+    cpp_test_files = (project_root / "tests").glob("test_*.cpp")
+    all_test_files = list(c_test_files) + list(cpp_test_files)
+    known_test_names = sorted([p.stem for p in all_test_files])
 
     if orig_dir.exists():
         for orig_img in orig_dir.glob("*.png"):
             for test_name in known_test_names:
                 prefix = f"{test_name}_"
                 if orig_img.stem.startswith(prefix):
-                    func_name = orig_img.stem[len(prefix) :]
+                    sanitized_func_name = orig_img.stem[len(prefix) :]
                     obf_img = obf_dir / orig_img.name
                     if obf_img.exists():
                         if test_name not in tests:
                             tests[test_name] = {}
-                        tests[test_name][func_name] = {
+
+                        # Store by sanitized name for lookup, but display desanitized name
+                        tests[test_name][sanitized_func_name] = {
+                            "display_name": desanitize_func_name(sanitized_func_name),
                             "original": str(orig_img.relative_to(results_dir)),
                             "obfuscated": str(obf_img.relative_to(results_dir)),
                         }
@@ -186,14 +194,11 @@ def create_comparison_html():
     if reports_dir.exists():
         for test_name in known_test_names:
             report_to_load = None
-            report_type = None
+            report_type = "full"  # Prioritize 'full' report for consistency
 
-            for r_type in ["full", "cff", "string", "fake"]:
-                potential_path = reports_dir / f"{test_name}_{r_type}.json"
-                if potential_path.exists():
-                    report_to_load = potential_path
-                    report_type = r_type
-                    break
+            potential_path = reports_dir / f"{test_name}_{report_type}.json"
+            if potential_path.exists():
+                report_to_load = potential_path
 
             if report_to_load:
                 try:
@@ -207,11 +212,8 @@ def create_comparison_html():
                     orig_size = orig_bin.stat().st_size if orig_bin.exists() else None
                     obf_size = obf_bin.stat().st_size if obf_bin.exists() else None
 
-                    change_str = "n/a"
-                    if (
-                        all(s is not None for s in [orig_size, obf_size])
-                        and orig_size > 0
-                    ):
+                    change_str = "N/A"
+                    if orig_size is not None and obf_size is not None and orig_size > 0:
                         change_pct = (obf_size - orig_size) / orig_size * 100
                         change_str = f"{change_pct:+.2f}%"
 
@@ -225,7 +227,6 @@ def create_comparison_html():
             else:
                 metrics[test_name] = {}
 
-    # generate test options html
     test_options = "\n".join(
         f'                <option value="{name}">{name}</option>'
         for name in sorted(tests.keys())
@@ -238,237 +239,34 @@ def create_comparison_html():
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Chakravyuha - Visual Comparison Report</title>
     <style>
-        * {{
-            margin: 0;
-            padding: 0;
-            box-sizing: border-box;
-        }}
-
-        body {{
-            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
-            background: linear-gradient(135deg, #f5f7fa 0%, #c3cfe2 100%);
-            color: #2c3e50;
-            padding: 20px;
-            min-height: 100vh;
-        }}
-
-        .container {{
-            max-width: 1600px;
-            margin: 0 auto;
-            background: white;
-            border-radius: 16px;
-            box-shadow: 0 20px 60px rgba(0, 0, 0, 0.15);
-            overflow: hidden;
-        }}
-
-        .header {{
-            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-            color: white;
-            padding: 50px 40px;
-            text-align: center;
-        }}
-
-        .header h1 {{
-            font-size: 3em;
-            margin-bottom: 12px;
-            font-weight: 700;
-            text-shadow: 0 2px 10px rgba(0,0,0,0.2);
-        }}
-
-        .header p {{
-            font-size: 1.3em;
-            opacity: 0.95;
-        }}
-
-        .controls {{
-            padding: 30px;
-            background: #f8f9fa;
-            border-bottom: 2px solid #e9ecef;
-            display: flex;
-            gap: 20px;
-            align-items: center;
-            flex-wrap: wrap;
-        }}
-
-        .controls select,
-        .controls button {{
-            padding: 14px 24px;
-            border-radius: 10px;
-            border: 2px solid #dee2e6;
-            background: white;
-            font-size: 16px;
-            font-weight: 500;
-            cursor: pointer;
-            transition: all 0.3s ease;
-            box-shadow: 0 2px 5px rgba(0,0,0,0.05);
-        }}
-
-        .controls select {{
-            min-width: 250px;
-        }}
-
-        .controls select:hover,
-        .controls select:focus {{
-            border-color: #667eea;
-            outline: none;
-            box-shadow: 0 4px 12px rgba(102, 126, 234, 0.2);
-        }}
-
-        .controls button {{
-            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-            color: white;
-            border: none;
-            font-weight: 600;
-        }}
-
-        .controls button:hover {{
-            transform: translateY(-2px);
-            box-shadow: 0 6px 20px rgba(102, 126, 234, 0.4);
-        }}
-
-        .metrics {{
-            padding: 40px;
-            background: linear-gradient(135deg, #f5f7fa 0%, #e9ecef 100%);
-            display: none;
-            border-bottom: 2px solid #dee2e6;
-        }}
-
-        .metrics.show {{
-            display: block;
-        }}
-
-        .metrics-grid {{
-            display: grid;
-            grid-template-columns: repeat(4, 1fr);
-            gap: 25px;
-        }}
-
-        .metric-card {{
-            background: white;
-            padding: 25px;
-            border-radius: 14px;
-            text-align: center;
-            box-shadow: 0 6px 20px rgba(0, 0, 0, 0.08);
-            transition: all 0.3s ease;
-            border: 1px solid #e9ecef;
-        }}
-
-        .metric-card:hover {{
-            transform: translateY(-5px);
-            box-shadow: 0 12px 30px rgba(0, 0, 0, 0.15);
-        }}
-
-        .metric-card .value {{
-            font-size: 2.2em;
-            font-weight: 700;
-            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-            -webkit-background-clip: text;
-            -webkit-text-fill-color: transparent;
-            background-clip: text;
-            margin-bottom: 10px;
-        }}
-
-        .metric-card .value.small-text {{
-             font-size: 1.1em;
-             line-height: 1.5;
-             font-weight: 500;
-             color: #2c3e50; /* Fallback color */
-             -webkit-text-fill-color: initial; /* Reset gradient for small text */
-        }}
-
-        .metric-card .label {{
-            color: #495057;
-            margin-top: 8px;
-            font-size: 0.9em;
-            font-weight: 600;
-            text-transform: uppercase;
-            letter-spacing: 0.5px;
-        }}
-
-        .metric-card .sub-label {{
-            color: #6c757d;
-            font-size: 0.8em;
-            margin-top: 6px;
-            font-weight: 400;
-        }}
-
-        .comparison-container {{
-            padding: 40px;
-        }}
-
-        .image-container {{
-            display: flex;
-            gap: 30px;
-            justify-content: center;
-            align-items: flex-start;
-            min-height: 400px;
-        }}
-
-        .image-wrapper {{
-            flex: 1;
-            text-align: center;
-            max-width: 50%;
-        }}
-
-        .image-wrapper h3 {{
-            margin-bottom: 20px;
-            color: #2c3e50;
-            font-size: 1.6em;
-            font-weight: 700;
-            padding: 15px;
-            background: linear-gradient(135deg, #f8f9fa 0%, #e9ecef 100%);
-            border-radius: 10px;
-            border-left: 5px solid #667eea;
-        }}
-
-        .image-wrapper img {{
-            max-width: 100%;
-            height: auto;
-            border: 3px solid #dee2e6;
-            border-radius: 12px;
-            background: white;
-            box-shadow: 0 10px 30px rgba(0,0,0,0.1);
-            transition: all 0.3s ease;
-        }}
-
-        .image-wrapper img:hover {{
-            transform: scale(1.02);
-            box-shadow: 0 15px 40px rgba(0,0,0,0.15);
-        }}
-
-        .no-data {{
-            text-align: center;
-            padding: 80px 40px;
-            color: #6c757d;
-            font-size: 1.4em;
-            font-weight: 500;
-        }}
-
-        .footer {{
-            padding: 30px;
-            text-align: center;
-            background: linear-gradient(135deg, #2c3e50 0%, #34495e 100%);
-            color: #ecf0f1;
-            font-size: 1em;
-        }}
-
-        @media (max-width: 1200px) {{
-            .metrics-grid {{
-                grid-template-columns: repeat(2, 1fr);
-            }}
-        }}
-
-        @media (max-width: 768px) {{
-            .metrics-grid {{
-                grid-template-columns: 1fr;
-            }}
-             .image-container {{
-                flex-direction: column;
-            }}
-            .image-wrapper {{
-                max-width: 100%;
-            }}
-        }}
+        * {{ margin: 0; padding: 0; box-sizing: border-box; }}
+        body {{ font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif; background: linear-gradient(135deg, #f5f7fa 0%, #c3cfe2 100%); color: #2c3e50; padding: 20px; min-height: 100vh; }}
+        .container {{ max-width: 1600px; margin: 0 auto; background: white; border-radius: 16px; box-shadow: 0 20px 60px rgba(0, 0, 0, 0.15); overflow: hidden; }}
+        .header {{ background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); color: white; padding: 50px 40px; text-align: center; }}
+        h1 {{ font-size: 3em; margin-bottom: 12px; font-weight: 700; text-shadow: 0 2px 10px rgba(0,0,0,0.2); }}
+        .header p {{ font-size: 1.3em; opacity: 0.95; }}
+        .controls {{ padding: 30px; background: #f8f9fa; border-bottom: 2px solid #e9ecef; display: flex; gap: 20px; align-items: center; flex-wrap: wrap; }}
+        .controls select, .controls button {{ padding: 14px 24px; border-radius: 10px; border: 2px solid #dee2e6; background: white; font-size: 16px; font-weight: 500; cursor: pointer; transition: all 0.3s ease; box-shadow: 0 2px 5px rgba(0,0,0,0.05); }}
+        .controls select {{ min-width: 250px; }}
+        .controls select:hover, .controls select:focus {{ border-color: #667eea; outline: none; box-shadow: 0 4px 12px rgba(102, 126, 234, 0.2); }}
+        .controls button {{ background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); color: white; border: none; font-weight: 600; }}
+        .controls button:hover {{ transform: translateY(-2px); box-shadow: 0 6px 20px rgba(102, 126, 234, 0.4); }}
+        .metrics {{ padding: 40px; background: linear-gradient(135deg, #f5f7fa 0%, #e9ecef 100%); display: none; border-bottom: 2px solid #dee2e6; }}
+        .metrics.show {{ display: block; }}
+        .metrics-grid {{ display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 25px; }}
+        .metric-card {{ background: white; padding: 25px; border-radius: 14px; text-align: center; box-shadow: 0 6px 20px rgba(0, 0, 0, 0.08); transition: all 0.3s ease; border: 1px solid #e9ecef; }}
+        .metric-card:hover {{ transform: translateY(-5px); box-shadow: 0 12px 30px rgba(0, 0, 0, 0.15); }}
+        .metric-card .value {{ font-size: 2.2em; font-weight: 700; background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); -webkit-background-clip: text; -webkit-text-fill-color: transparent; background-clip: text; margin-bottom: 10px; }}
+        .metric-card .value.small-text {{ font-size: 1.1em; line-height: 1.5; font-weight: 500; color: #2c3e50; -webkit-text-fill-color: initial; }}
+        .metric-card .label {{ color: #495057; margin-top: 8px; font-size: 0.9em; font-weight: 600; text-transform: uppercase; letter-spacing: 0.5px; }}
+        .metric-card .sub-label {{ color: #6c757d; font-size: 0.8em; margin-top: 6px; font-weight: 400; }}
+        .comparison-container {{ padding: 40px; }}
+        .image-container {{ display: flex; gap: 30px; justify-content: center; align-items: flex-start; min-height: 400px; }}
+        .image-wrapper {{ flex: 1; text-align: center; max-width: 50%; }}
+        .image-wrapper h3 {{ margin-bottom: 20px; color: #2c3e50; font-size: 1.6em; font-weight: 700; padding: 15px; background: linear-gradient(135deg, #f8f9fa 0%, #e9ecef 100%); border-radius: 10px; border-left: 5px solid #667eea; }}
+        .image-wrapper img {{ max-width: 100%; height: auto; border: 3px solid #dee2e6; border-radius: 12px; background: white; box-shadow: 0 10px 30px rgba(0,0,0,0.1); }}
+        .no-data {{ text-align: center; padding: 80px 40px; color: #6c757d; font-size: 1.4em; font-weight: 500; }}
+        .footer {{ padding: 30px; text-align: center; background: linear-gradient(135deg, #2c3e50 0%, #34495e 100%); color: #ecf0f1; font-size: 1em; }}
     </style>
 </head>
 <body>
@@ -477,40 +275,20 @@ def create_comparison_html():
             <h1>🔒 Chakravyuha Obfuscation Report</h1>
             <p>Visual Comparison of Original vs. Obfuscated Control Flow Graphs</p>
         </div>
-
         <div class="controls">
-            <select id="testSelect">
-                <option value="">Select a test...</option>
-{test_options}
-            </select>
-            <select id="functionSelect" disabled>
-                <option value="">Select a function...</option>
-            </select>
+            <select id="testSelect"><option value="">Select a test...</option>{test_options}</select>
+            <select id="functionSelect" disabled><option value="">Select a function...</option></select>
             <button onclick="toggleMetrics()">📊 Show Full Report</button>
         </div>
-
-        <div class="metrics" id="metrics">
-            <div class="metrics-grid" id="metricsGrid"></div>
-        </div>
-
-        <div class="comparison-container">
-            <div id="imageContainer" class="image-container">
-                <div class="no-data">Select a test and function to view comparison</div>
-            </div>
-        </div>
-
-        <div class="footer">
-            <p>Generated by the Chakravyuha LLVM Obfuscator</p>
-        </div>
+        <div class="metrics" id="metrics"><div class="metrics-grid" id="metricsGrid"></div></div>
+        <div class="comparison-container"><div id="imageContainer" class="image-container"><div class="no-data">Select a test and function to view comparison</div></div></div>
+        <div class="footer"><p>Generated by the Chakravyuha LLVM Obfuscator</p></div>
     </div>
-
     <script>
-        const tests = {json.dumps(tests, indent=8)};
-        const metrics = {json.dumps(metrics, indent=8)};
-
+        const tests = {json.dumps(tests, indent=4)};
+        const metrics = {json.dumps(metrics, indent=4)};
         let currentTest = '';
         let currentFunction = '';
-
         const testSelect = document.getElementById('testSelect');
         const funcSelect = document.getElementById('functionSelect');
         const imageContainer = document.getElementById('imageContainer');
@@ -521,6 +299,7 @@ def create_comparison_html():
             currentTest = e.target.value;
             updateFunctionList();
             updateDisplay();
+            if (metricsDiv.classList.contains('show')) {{ updateMetrics(); }}
         }});
 
         funcSelect.addEventListener('change', function(e) {{
@@ -531,19 +310,19 @@ def create_comparison_html():
         function updateFunctionList() {{
             funcSelect.innerHTML = '<option value="">Select a function...</option>';
             funcSelect.disabled = true;
-
             if (currentTest && tests[currentTest]) {{
                 funcSelect.disabled = false;
-                const functions = Object.keys(tests[currentTest]).sort((a, b) => {{
-                    return a.localeCompare(b, undefined, {{numeric: true}});
-                }});
-
-                functions.forEach(func => {{
+                const functions = Object.keys(tests[currentTest]).sort((a, b) => a.localeCompare(b, undefined, {{numeric: true}}));
+                functions.forEach(funcKey => {{
                     const option = document.createElement('option');
-                    option.value = func;
-                    option.textContent = func.replace(/_/g, ' ');
+                    option.value = funcKey;
+                    option.textContent = tests[currentTest][funcKey].display_name;
                     funcSelect.appendChild(option);
                 }});
+                if (functions.length > 0) {{
+                    funcSelect.value = functions[0];
+                    currentFunction = functions[0];
+                }}
             }}
         }}
 
@@ -553,26 +332,13 @@ def create_comparison_html():
             }} else {{
                 const images = tests[currentTest][currentFunction];
                 imageContainer.innerHTML = `
-                    <div class="image-wrapper">
-                        <h3>Original</h3>
-                        <img src="../../${{images.original}}" alt="Original CFG">
-                    </div>
-                    <div class="image-wrapper">
-                        <h3>Obfuscated</h3>
-                        <img src="../../${{images.obfuscated}}" alt="Obfuscated CFG">
-                    </div>
-                `;
-            }}
-
-            if (metricsDiv.classList.contains('show')) {{
-                updateMetrics();
+                    <div class="image-wrapper"><h3>Original</h3><img src="../../${{images.original}}" alt="Original CFG"></div>
+                    <div class="image-wrapper"><h3>Obfuscated</h3><img src="../../${{images.obfuscated}}" alt="Obfuscated CFG"></div>`;
             }}
         }}
 
         function toggleMetrics() {{
-            if (!metricsDiv.classList.contains('show')) {{
-                updateMetrics();
-            }}
+            if (!metricsDiv.classList.contains('show')) {{ updateMetrics(); }}
             metricsDiv.classList.toggle('show');
         }}
 
@@ -580,58 +346,26 @@ def create_comparison_html():
             if (currentTest && metrics[currentTest] && Object.keys(metrics[currentTest]).length > 0) {{
                 const m = metrics[currentTest];
                 const o = m.obfuscationMetrics || {{}};
-                const cff = o.controlFlowFlattening || {{}};
-                const se = o.stringEncryption || {{}};
-                const fci = o.fakeCodeInsertion || {{}};
+                const cff = o.controlFlowFlattening || {{ "flattenedFunctions": 0, "flattenedBlocks": 0 }};
+                const se = o.stringEncryption || {{ "count": 0 }};
+                const fci = o.fakeCodeInsertion || {{ "insertedBlocks": 0 }};
                 const passes = (o.passesRun || []).join('<br>') || 'None';
                 const attrs = m.outputAttributes || {{}};
                 const bin = m.binary_metrics || {{}};
-
                 metricsGrid.innerHTML = `
-                    <div class="metric-card">
-                        <div class="value">${{attrs.totalIRSizeChange || 'N/A'}}</div>
-                        <div class="label">Total IR Size Change</div>
-                        <div class="sub-label">${{attrs.originalIRSize || '?'}} &rarr; ${{attrs.obfuscatedIRSize || '?'}}</div>
-                    </div>
-                    <div class="metric-card">
-                        <div class="value">${{bin.change_pct || 'N/A'}}</div>
-                        <div class="label">Executable Size Change</div>
-                        <div class="sub-label">${{bin.original_size || '?'}} &rarr; ${{bin.obfuscated_size || '?'}}</div>
-                    </div>
-                    <div class="metric-card">
-                        <div class="value">${{cff.flattenedFunctions || 0}}</div>
-                        <div class="label">Flattened Functions</div>
-                    </div>
-                    <div class="metric-card">
-                        <div class="value">${{cff.flattenedBlocks || 0}}</div>
-                        <div class="label">Flattened Blocks</div>
-                    </div>
-                    <div class="metric-card">
-                        <div class="value">${{se.count || 0}}</div>
-                        <div class="label">Strings Encrypted</div>
-                    </div>
-                    <div class="metric-card">
-                        <div class="value">${{fci.insertedBlocks || 0}}</div>
-                        <div class="label">Fake Blocks Inserted</div>
-                    </div>
-                    <div class="metric-card">
-                        <div class="value small-text">${{passes}}</div>
-                        <div class="label">Passes Run</div>
-                    </div>
-                    <div class="metric-card">
-                        <div class="value">${{attrs.stringDataSizeChange || '0.00%'}}</div>
-                        <div class="label">IR String Data Change</div>
-                        <div class="sub-label">(0% is expected)</div>
-                    </div>
-                `;
+                    <div class="metric-card"><div class="value">${{bin.change_pct || 'N/A'}}</div><div class="label">Exec Size Change</div><div class="sub-label">${{bin.original_size || '?'}} &rarr; ${{bin.obfuscated_size || '?'}}</div></div>
+                    <div class="metric-card"><div class="value">${{attrs.totalIRSizeChange || 'N/A'}}</div><div class="label">IR Size Change</div><div class="sub-label">${{attrs.originalIRSize || '?'}} &rarr; ${{attrs.obfuscatedIRSize || '?'}}</div></div>
+                    <div class="metric-card"><div class="value">${{cff.flattenedFunctions}}</div><div class="label">Flattened Funcs</div></div>
+                    <div class="metric-card"><div class="value">${{cff.flattenedBlocks}}</div><div class="label">Flattened Blocks</div></div>
+                    <div class="metric-card"><div class="value">${{se.count}}</div><div class="label">Strings Encrypted</div></div>
+                    <div class="metric-card"><div class="value">${{fci.insertedBlocks}}</div><div class="label">Fake Blocks</div></div>
+                    <div class="metric-card"><div class="value small-text">${{passes}}</div><div class="label">Passes Run</div></div>
+                    <div class="metric-card"><div class="value">${{o.cyclesCompleted || 1}}</div><div class="label">Cycles</div></div>`;
             }} else {{
-                metricsGrid.innerHTML = `
-                    <div class="metric-card" style="grid-column: 1 / -1;">
-                        <div class="label">No report data available for this test.</div>
-                    </div>
-                `;
+                metricsGrid.innerHTML = `<div class="metric-card" style="grid-column: 1 / -1;"><div class="label">No report data. Select a test to see its metrics.</div></div>`;
             }}
         }}
+        updateMetrics(); // Initial call
     </script>
 </body>
 </html>"""
@@ -657,15 +391,9 @@ def main():
             )
             llvm_bin_dir = Path(result.stdout.strip()) / "bin"
             if llvm_bin_dir.exists():
-                print(
-                    f"macos detected. prepending homebrew llvm to path: {llvm_bin_dir}"
-                )
                 os.environ["PATH"] = str(llvm_bin_dir) + os.pathsep + os.environ["PATH"]
         except (subprocess.CalledProcessError, FileNotFoundError):
-            print(
-                "warning: could not find homebrew llvm. "
-                "assuming 'opt' and 'dot' are in the standard path."
-            )
+            print("warning: could not find homebrew llvm. assuming tools are in path.")
 
     parser = ArgumentParser(
         description="chakravyuha obfuscator visualization pipeline",
@@ -676,7 +404,7 @@ def main():
         nargs="?",
         default="visualize",
         choices=["visualize", "view"],
-        help="action to perform (default: visualize). 'view' opens the report in a browser.",
+        help="action to perform (default: visualize).",
     )
     args = parser.parse_args()
 

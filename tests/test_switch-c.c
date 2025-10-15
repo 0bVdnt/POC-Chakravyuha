@@ -1,4 +1,3 @@
-// test_switch.c - Switch statement handling
 #include <stdio.h>
 
 int switch_basic(int option) {

@@ -107,10 +107,10 @@ def run_command(cmd_args, log_file=None, env=None):
 
 
 # --- Main Test Logic ---
-def run_test(test_c_file, pipeline_name, pass_plugin_path, clang, opt, env):
-    test_name = test_c_file.stem
+def run_test(test_file, pipeline_name, pass_plugin_path, compiler, opt, env):
+    test_name = test_file.stem
     print(
-        f"\n{Colors.YELLOW}--- Testing: {test_name} (Pipeline: {pipeline_name}) ---{
+        f"{Colors.YELLOW}--- Testing: {test_name} (Pipeline: {pipeline_name}) ---{
             Colors.NC
         }"
     )
@@ -135,7 +135,7 @@ def run_test(test_c_file, pipeline_name, pass_plugin_path, clang, opt, env):
 
     print(f"{Colors.CYAN}  [1/4] Compiling to LLVM IR...{Colors.NC}")
     success, out = run_command(
-        [clang, "-O0", "-emit-llvm", "-S", test_c_file, "-o", original_ll], env=env
+        [compiler, "-O0", "-emit-llvm", "-S", test_file, "-o", original_ll], env=env
     )
     if not success:
         print(f"{Colors.RED}  ✗ Failed to compile to IR:\n{out}{Colors.NC}")
@@ -144,20 +144,16 @@ def run_test(test_c_file, pipeline_name, pass_plugin_path, clang, opt, env):
     print(
         f"{Colors.CYAN}  [2/4] Applying obfuscation and generating report...{Colors.NC}"
     )
-
-    # The full pipeline now includes the reporting pass at the end.
     full_pipeline = f"{PASS_PIPELINES[pipeline_name]},chakravyuha-emit-report"
     cmd_unified = [
         opt,
         f"-load-pass-plugin={pass_plugin_path}",
         f"-passes={full_pipeline}",
         original_ll,
-        "-S",  # Output textual IR to stdout
+        "-S",
     ]
 
     try:
-        # Execute the single command, directing stdout (the IR) to the .ll
-        # file and capturing stderr (the JSON report) in a variable.
         with open(obfuscated_ll, "w") as f_ll:
             result = subprocess.run(
                 [str(c) for c in cmd_unified],
@@ -167,28 +163,27 @@ def run_test(test_c_file, pipeline_name, pass_plugin_path, clang, opt, env):
                 stderr=subprocess.PIPE,
                 env=env,
             )
-
-        # Write the captured stderr content to the final JSON report file.
         with open(report_json, "w") as f_json:
             f_json.write(result.stderr)
 
     except subprocess.CalledProcessError as e:
         print(f"{Colors.RED}  ✗ Obfuscation or reporting pass failed!{Colors.NC}")
-        # Write any error output to the log file for debugging
         with open(log_file, "w") as f_log:
-            f_log.write("--- STDOUT ---\n")
-            f_log.write(e.stdout or "(empty)")
-            f_log.write("\n--- STDERR ---\n")
-            f_log.write(e.stderr or "(empty)")
+            f_log.write(
+                "--- STDOUT ---\n"
+                + (e.stdout or "(empty)")
+                + "\n--- STDERR ---\n"
+                + (e.stderr or "(empty)")
+            )
         print(f"  Check log for details: {log_file}")
         return False
 
     print(f"{Colors.CYAN}  [3/4] Compiling binaries...{Colors.NC}")
-    success, out = run_command([clang, original_ll, "-o", original_bin], env=env)
+    success, out = run_command([compiler, original_ll, "-o", original_bin], env=env)
     if not success:
         print(f"{Colors.RED}  ✗ Failed to compile original binary:\n{out}{Colors.NC}")
         return False
-    success, out = run_command([clang, obfuscated_ll, "-o", obfuscated_bin], env=env)
+    success, out = run_command([compiler, obfuscated_ll, "-o", obfuscated_bin], env=env)
     if not success:
         print(f"{Colors.RED}  ✗ Failed to compile obfuscated binary:\n{out}{Colors.NC}")
         return False
@@ -205,10 +200,10 @@ def run_test(test_c_file, pipeline_name, pass_plugin_path, clang, opt, env):
 
     with open(original_out, "r") as f1, open(obfuscated_out, "r") as f2:
         if f1.read() == f2.read():
-            print(f"{Colors.GREEN}  ✓ Test Passed: Outputs match!{Colors.NC}")
+            print(f"{Colors.GREEN}  ✓ Test Passed: Outputs match!{Colors.NC}\n\n")
             return True
         else:
-            print(f"{Colors.RED}  ✗ Test FAILED: Outputs differ!{Colors.NC}")
+            print(f"{Colors.RED}  ✗ Test FAILED: Outputs differ!{Colors.NC}\n\n")
             return False
 
 
@@ -248,22 +243,24 @@ def main():
             print(
                 f"{
                     Colors.YELLOW
-                }Warning: Could not find Homebrew LLVM. Assuming 'opt' and 'clang' are in PATH.{
+                }Warning: Could not find Homebrew LLVM. Assuming tools are in PATH.{
                     Colors.NC
                 }"
             )
 
     clang = find_exec(
-        "clang",
-        "'clang' not found. Check your LLVM installation and PATH.",
+        "clang", "'clang' not found. Check your LLVM installation and PATH."
+    )
+    clang_plus_plus = find_exec(
+        "clang++", "'clang++' not found. Check your LLVM installation and PATH."
     )
     opt = find_exec(
-        "opt",
-        "'opt' from LLVM not found. Check your LLVM installation and PATH.",
+        "opt", "'opt' from LLVM not found. Check your LLVM installation and PATH."
     )
 
     pass_plugin_path = find_pass_plugin()
     env = os.environ.copy()
+
     llvm_bin_dir = opt.parent
     system = platform.system()
     if system == "Windows":
@@ -288,10 +285,26 @@ def main():
     for subdir in ["ll_files", "binaries", "reports", "logs", "outputs"]:
         (RESULTS_DIR / subdir).mkdir(parents=True, exist_ok=True)
 
-    test_files = sorted(list(TEST_SRC_DIR.glob("test_*.c")))
+    c_files = list(TEST_SRC_DIR.glob("test_*.c"))
+    cpp_files = list(TEST_SRC_DIR.glob("test_*.cpp"))
+    test_files = sorted(c_files + cpp_files)
+
+    if not test_files:
+        print(f"{Colors.RED}Error: No test files found in '{TEST_SRC_DIR}'.{Colors.NC}")
+        sys.exit(1)
+
     passed_count, failed_count = 0, 0
     for test_file in test_files:
-        if run_test(test_file, args.pipeline, pass_plugin_path, clang, opt, env):
+        if test_file.suffix == ".cpp":
+            compiler_to_use = clang_plus_plus
+            print(f"{Colors.CYAN}Detected C++ test: {test_file.name}{Colors.NC}")
+        else:
+            compiler_to_use = clang
+            print(f"{Colors.CYAN}Detected C test: {test_file.name}{Colors.NC}")
+
+        if run_test(
+            test_file, args.pipeline, pass_plugin_path, compiler_to_use, opt, env
+        ):
             passed_count += 1
         else:
             failed_count += 1

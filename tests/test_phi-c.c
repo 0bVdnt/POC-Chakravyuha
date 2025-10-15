@@ -1,4 +1,3 @@
-// test_phi.c - Test PHI node handling
 #include <stdio.h>
 
 int phi_simple(int x, int y) {
@@ -10,7 +9,6 @@ int phi_simple(int x, int y) {
     result = y - x;
   }
 
-  // PHI node here for 'result'
   return result * 2;
 }
 
@@ -19,7 +17,6 @@ int phi_loop(int n) {
   int i = 0;
 
   while (i < n) {
-    // PHI nodes for 'sum' and 'i'
     if (i % 2 == 0) {
       sum += i;
     } else {
@@ -48,7 +45,6 @@ int phi_complex(int a, int b, int c) {
     z = c * 2;
   }
 
-  // Multiple PHI nodes here
   int result = x + y + z;
 
   if (result > 100) {
