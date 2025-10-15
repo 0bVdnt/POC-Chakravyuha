@@ -4,31 +4,7 @@
 
 bool validate_license(const char *key) {
   const char *secret_product_code = "CHAKRA-OBFUSCATOR-V1";
-  int key_length = strlen(key);
-  int secret_length = strlen(secret_product_code);
-
-  if (key_length != secret_length) {
-    return false;
-  }
-
-  int accumulator = 0;
-
-  for (int i = 0; i < key_length; ++i) {
-    int key_char = key[i];
-    int secret_char = secret_product_code[i];
-
-    if (i % 3 == 0) {
-      accumulator += (key_char ^ secret_char);
-    } else if (i % 3 == 1) {
-      accumulator -= (key_char - secret_char);
-    } else {
-      accumulator += (key_char + secret_char) / 2;
-    }
-
-    accumulator = (accumulator * 3) & 0xFF;
-  }
-
-  return accumulator == 180;
+  return strcmp(secret_product_code, key) == 0;
 }
 
 int main(int argc, char *argv[]) {
