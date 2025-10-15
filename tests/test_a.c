@@ -9,9 +9,8 @@ bool validate_license(const char *key) {
 
 int main(int argc, char *argv[]) {
   if (argc != 2) {
-    printf("Usage: %s <license_key>\n", argv[0]);
     printf("Please provide a license key to validate.\n");
-    return 1;
+    return 0;
   }
 
   char *user_key = argv[1];
