@@ -1,6 +1,8 @@
 # Chakravyuha: An Intelligent C/C++ Obfuscation Engine
 <div align="center">
 
+<img src="assets/chakravyuha_logo.png" alt="Chakravyuha Logo" width="200">
+
 [![Top Language](https://img.shields.io/github/languages/top/0bvdnt/poc-chakravyuha?style=for-the-badge&color=blue)](https://github.com/0bvdnt/poc-chakravyuha)
 [![LLVM Version](https://img.shields.io/badge/LLVM-20.1+-blueviolet?style=for-the-badge&logo=llvm)](https://llvm.org/)
 [![Last Commit](https://img.shields.io/github/last-commit/0bvdnt/poc-chakravyuha?style=for-the-badge&color=brightgreen)](https://github.com/0bvdnt/poc-chakravyuha/commits/main)
@@ -70,10 +72,10 @@ pacman -Syu
 # 2. Install required development toolchain and libraries
 pacman -S --needed \
     make git python3 \
-    mingw-w-ucrt-x86_64-toolchain \
-    mingw-w-ucrt-x86_64-cmake \
-    mingw-w-ucrt-x86_64-llvm \
-    mingw-w-ucrt-x86_64-graphviz
+    mingw-w64-ucrt-x86_64-toolchain \
+    mingw-w64-ucrt-x86_64-cmake \
+    mingw-w64-ucrt-x86_64-llvm \
+    mingw-w64-ucrt-x86_64-graphviz
 ```
 
 ### Ubuntu / Debian
@@ -123,9 +125,9 @@ The project uses CMake for a unified, cross-platform build process.
       ```
 
 4.  **Compile the pass library:**
-    `bash
-cmake --build . --config Release
-`
+    ```bash
+    cmake --build . --config Release
+    ```
     After a successful build, the pass library (`ChakravyuhaPasses.dll`, `.so`, or `.dylib`) will be located in the `build/lib/` directory.
 
 ---
