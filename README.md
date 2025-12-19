@@ -12,6 +12,7 @@
 [![Platform Support](https://img.shields.io/badge/platform-Linux%20%7C%20Windows%20%7C%20macOS-orange.svg?style=for-the-badge)](https://github.com/0bVdnt/LLVM-Passes/tree/main/ChakraPasses)
 
 </div>
+
 ## 1. Introduction
 
 Chakravyuha is a powerful suite of code obfuscation passes for the LLVM compiler infrastructure. It is engineered as a cross-platform tool that transforms C/C++ source code at the Intermediate Representation (IR) level to produce executables that are significantly more resistant to reverse engineering, static analysis, and tampering.
