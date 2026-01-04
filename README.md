@@ -1,15 +1,16 @@
 # Chakravyuha: An Intelligent C/C++ Obfuscation Engine
+
 <div align="center">
 
 <img src="assets/chakravyuha_logo.png" alt="Chakravyuha Logo" width="200">
 
-[![Top Language](https://img.shields.io/github/languages/top/0bvdnt/poc-chakravyuha?style=for-the-badge&color=blue)](https://github.com/0bvdnt/poc-chakravyuha)
+[![Top Language](https://img.shields.io/github/languages/top/0bvdnt/chakravyuha?style=for-the-badge&color=blue)](https://github.com/0bvdnt/chakravyuha)
 [![LLVM Version](https://img.shields.io/badge/LLVM-20.1+-blueviolet?style=for-the-badge&logo=llvm)](https://llvm.org/)
-[![Last Commit](https://img.shields.io/github/last-commit/0bvdnt/poc-chakravyuha?style=for-the-badge&color=brightgreen)](https://github.com/0bvdnt/poc-chakravyuha/commits/main)
-[![Repository Size](https://img.shields.io/github/repo-size/0bvdnt/poc-chakravyuha?style=for-the-badge)](https://github.com/0bvdnt/poc-chakravyuha)
+[![Last Commit](https://img.shields.io/github/last-commit/0bvdnt/chakravyuha?style=for-the-badge&color=brightgreen)](https://github.com/0bvdnt/chakravyuha/commits/main)
+[![Repository Size](https://img.shields.io/github/repo-size/0bvdnt/chakravyuha?style=for-the-badge)](https://github.com/0bvdnt/chakravyuha)
 [![License: AGPL v3](https://img.shields.io/badge/License-AGPL%20v3-blue.svg?style=for-the-badge)](https://www.gnu.org/licenses/agpl-3.0)
-[![Build Status](https://img.shields.io/badge/build-passing-brightgreen.svg?style=for-the-badge)](https://github.com/0bvdnt/poc-chakravyuha)
-[![Platform Support](https://img.shields.io/badge/platform-Linux%20%7C%20Windows%20%7C%20macOS-orange.svg?style=for-the-badge)](https://github.com/0bVdnt/LLVM-Passes/tree/main/ChakraPasses)
+[![Build Status](https://img.shields.io/badge/build-passing-brightgreen.svg?style=for-the-badge)](https://github.com/0bvdnt/chakravyuha)
+[![Platform Support](https://img.shields.io/badge/platform-Linux%20%7C%20Windows%20%7C%20macOS-orange.svg?style=for-the-badge)](https://github.com/0bvdnt/chakravyuha)
 
 </div>
 
@@ -105,8 +106,8 @@ The project uses CMake for a unified, cross-platform build process.
 1.  **Clone the repository:**
 
     ```bash
-    git clone https://github.com/0bvdnt/poc-chakravyuha.git
-    cd poc-chakravyuha
+    git clone https://github.com/0bvdnt/chakravyuha.git
+    cd chakravyuha
     ```
 
 2.  **Create and enter a build directory:**
